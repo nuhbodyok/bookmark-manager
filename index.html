@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Bookmark Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5D5CDE',
+                        'primary-dark': '#4A49B8',
+                        'primary-light': '#7E7DE5',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for bookmark list */
+        .bookmark-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        .bookmark-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .dark .bookmark-list::-webkit-scrollbar-track {
+            background: #2d2d2d;
+        }
+        .bookmark-list::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 10px;
+        }
+        .dark .bookmark-list::-webkit-scrollbar-thumb {
+            background: #555;
+        }
+        .bookmark-list::-webkit-scrollbar-thumb:hover {
+            background: #aaa;
+        }
+        .dark .bookmark-list::-webkit-scrollbar-thumb:hover {
+            background: #777;
+        }
+        
+        /* Animation for add/remove bookmarks */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .bookmark-item {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+        
+        /* Loading spinner */
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid #5D5CDE;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-white dark:bg-[#181818] text-gray-900 dark:text-gray-100 min-h-screen transition-colors duration-200">
+    <div class="container mx-auto px-4 py-6 max-w-screen-xl">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-3">
+            <h1 class="text-xl md:text-2xl font-bold text-primary dark:text-primary-light">
+                Advanced Bookmark Manager
+            </h1>
+            <button id="themeToggle" class="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden dark:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+            </button>
+        </header>
+        
+        <!-- Import Section -->
+        <section class="mb-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
+            <h2 class="text-base font-semibold mb-2">Import Bookmarks</h2>
+            <div class="flex flex-col md:flex-row gap-2">
+                <div class="flex-1">
+                    <label class="block mb-1 text-xs font-medium">Upload Bookmark File</label>
+                    <div class="flex">
+                        <input type="file" id="fileInput" accept=".html,.htm,.json,.txt" class="hidden" />
+                        <label for="fileInput" class="cursor-pointer flex-1 bg-primary hover:bg-primary-dark text-white px-2 py-1 text-sm rounded-l-md text-center transition-colors">
+                            Choose File
+                        </label>
+                        <span id="fileName" class="bg-white dark:bg-gray-700 px-2 py-1 text-sm rounded-r-md border border-gray-300 dark:border-gray-600 flex-1 truncate">
+                            No file chosen
+                        </span>
+                    </div>
+                    <p class="text-xs mt-0.5 text-gray-600 dark:text-gray-400">
+                        Supports browser exports (HTML), JSON, and plain text URL lists
+                    </p>
+                </div>
+                
+                <div class="flex-1">
+                    <label for="urlInput" class="block mb-1 text-xs font-medium">Paste URLs (one per line)</label>
+                    <textarea id="urlInput" rows="2" class="w-full px-2 py-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-primary"></textarea>
+                </div>
+            </div>
+            
+            <div class="mt-2 flex flex-wrap gap-1">
+                <button id="importBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-1 text-sm rounded-md transition-colors">
+                    Import Bookmarks
+                </button>
+                <button id="clearInputBtn" class="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 py-1 text-sm rounded-md transition-colors">
+                    Clear Input
+                </button>
+            </div>
+        </section>
+        
+        <!-- Management Toolbar -->
+        <section class="mb-2 sticky top-0 z-10 bg-white dark:bg-[#181818] py-1">
+            <div class="flex flex-wrap items-center gap-1 mb-1">
+                <button id="removeDuplicatesBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-0.5 rounded text-xs transition-colors">
+                    Remove Duplicates
+                </button>
+                <div class="relative">
+                    <button id="sortBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-0.5 rounded text-xs transition-colors flex items-center">
+                        Sort
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                    <div id="sortDropdown" class="hidden absolute left-0 mt-1 w-40 bg-white dark:bg-gray-800 rounded shadow-lg z-20 border border-gray-200 dark:border-gray-700 text-xs">
+                        <button data-sort="title-asc" class="block px-2 py-1 text-xs w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Title (A-Z)</button>
+                        <button data-sort="title-desc" class="block px-2 py-1 text-xs w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Title (Z-A)</button>
+                        <button data-sort="domain-asc" class="block px-2 py-1 text-xs w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Domain (A-Z)</button>
+                        <button data-sort="date-newest" class="block px-2 py-1 text-xs w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Date Added (Newest)</button>
+                        <button data-sort="date-oldest" class="block px-2 py-1 text-xs w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Date Added (Oldest)</button>
+                    </div>
+                </div>
+                <button id="exportBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-0.5 rounded text-xs transition-colors">
+                    Export
+                </button>
+                <button id="selectAllBtn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 py-0.5 rounded text-xs transition-colors">
+                    Select All
+                </button>
+                <button id="deselectAllBtn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 py-0.5 rounded text-xs transition-colors">
+                    Deselect All
+                </button>
+                <button id="deleteSelectedBtn" class="bg-red-500 hover:bg-red-600 text-white px-2 py-0.5 rounded text-xs transition-colors">
+                    Delete Selected
+                </button>
+                <div class="relative ml-auto">
+                    <input id="searchInput" type="text" placeholder="Search..." class="w-full md:w-48 pl-6 pr-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+            </div>
+            <div class="flex justify-between items-center text-xs">
+                <span id="bookmarkCount" class="text-gray-600 dark:text-gray-400">0 bookmarks</span>
+                <span id="selectedCount" class="text-gray-600 dark:text-gray-400">0 selected</span>
+            </div>
+        </section>
+        
+        <!-- Bookmark Library -->
+        <section class="mb-3 p-2 bg-gray-100 dark:bg-gray-800 rounded-lg min-h-[400px]">
+            <div id="emptyState" class="text-center py-8">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                <h3 class="mt-3 text-lg font-medium text-gray-600 dark:text-gray-400">No bookmarks yet</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-500">Import your bookmarks to get started</p>
+            </div>
+            
+            <div id="bookmarkList" class="hidden bookmark-list max-h-[600px] overflow-y-auto">
+                <!-- Bookmark items will be populated here -->
+            </div>
+            
+            <div id="loadingState" class="hidden text-center py-6">
+                <div class="spinner mx-auto mb-2"></div>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Processing bookmarks...</p>
+            </div>
+        </section>
+        
+        <!-- Export Modal -->
+        <div id="exportModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-lg p-3 max-w-md w-full mx-4">
+                <h3 class="text-base font-bold mb-2">Export Bookmarks</h3>
+                <div class="mb-2">
+                    <label class="block mb-1 text-xs font-medium">Export Format</label>
+                    <select id="exportFormat" class="w-full px-2 py-1 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-primary">
+                        <option value="html">HTML (Browser Import)</option>
+                        <option value="json">JSON</option>
+                        <option value="text">Plain Text (URLs only)</option>
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="block mb-1 text-xs font-medium">Export Scope</label>
+                    <div class="space-y-1 text-xs">
+                        <label class="flex items-center">
+                            <input type="radio" name="exportScope" value="all" checked class="mr-1 h-3 w-3">
+                            All bookmarks
+                        </label>
+                        <label class="flex items-center">
+                            <input type="radio" name="exportScope" value="selected" class="mr-1 h-3 w-3">
+                            Selected bookmarks only
+                        </label>
+                        <label class="flex items-center">
+                            <input type="radio" name="exportScope" value="filtered" class="mr-1 h-3 w-3">
+                            Current filtered view
+                        </label>
+                    </div>
+                </div>
+                <div id="exportResult" class="mb-2 p-2 bg-gray-100 dark:bg-gray-700 rounded max-h-32 overflow-y-auto hidden">
+                    <pre id="exportContent" class="text-[10px] whitespace-pre-wrap"></pre>
+                </div>
+                <p class="mb-2 text-xs text-gray-600 dark:text-gray-400">
+                    To save the exported content, copy it and save to a file, or use your browser's "Save As" function.
+                </p>
+                <div class="flex justify-end gap-1">
+                    <button id="cancelExportBtn" class="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 py-1 text-xs rounded transition-colors">
+                        Cancel
+                    </button>
+                    <button id="generateExportBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-1 text-xs rounded transition-colors">
+                        Generate Export
+                    </button>
+                    <button id="copyExportBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-1 text-xs rounded transition-colors hidden">
+                        Copy to Clipboard
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            // Initialize dark mode based on system preference
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.documentElement.classList.add('dark');
+            }
+            
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+                if (event.matches) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            });
+            
+            document.addEventListener('DOMContentLoaded', () => {
+                // DOM Elements
+                const themeToggle = document.getElementById('themeToggle');
+                const fileInput = document.getElementById('fileInput');
+                const fileName = document.getElementById('fileName');
+                const urlInput = document.getElementById('urlInput');
+                const importBtn = document.getElementById('importBtn');
+                const clearInputBtn = document.getElementById('clearInputBtn');
+                const searchInput = document.getElementById('searchInput');
+                const removeDuplicatesBtn = document.getElementById('removeDuplicatesBtn');
+                const sortBtn = document.getElementById('sortBtn');
+                const sortDropdown = document.getElementById('sortDropdown');
+                const exportBtn = document.getElementById('exportBtn');
+                const selectAllBtn = document.getElementById('selectAllBtn');
+                const deselectAllBtn = document.getElementById('deselectAllBtn');
+                const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+                const bookmarkCount = document.getElementById('bookmarkCount');
+                const selectedCount = document.getElementById('selectedCount');
+                const emptyState = document.getElementById('emptyState');
+                const bookmarkList = document.getElementById('bookmarkList');
+                const loadingState = document.getElementById('loadingState');
+                const exportModal = document.getElementById('exportModal');
+                const cancelExportBtn = document.getElementById('cancelExportBtn');
+                const generateExportBtn = document.getElementById('generateExportBtn');
+                const copyExportBtn = document.getElementById('copyExportBtn');
+                const exportResult = document.getElementById('exportResult');
+                const exportContent = document.getElementById('exportContent');
+                
+                // State
+                let bookmarks = [];
+                let filteredBookmarks = [];
+                let selectedBookmarkIds = new Set();
+                
+                // Theme toggle
+                themeToggle.addEventListener('click', () => {
+                    document.documentElement.classList.toggle('dark');
+                });
+                
+                // File input handling
+                fileInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        fileName.textContent = e.target.files[0].name;
+                    } else {
+                        fileName.textContent = 'No file chosen';
+                    }
+                });
+                
+                // Clear input button
+                clearInputBtn.addEventListener('click', () => {
+                    fileInput.value = '';
+                    fileName.textContent = 'No file chosen';
+                    urlInput.value = '';
+                });
+                
+                // Show/hide sort dropdown
+                sortBtn.addEventListener('click', () => {
+                    sortDropdown.classList.toggle('hidden');
+                });
+                
+                // Close sort dropdown when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!sortBtn.contains(e.target) && !sortDropdown.contains(e.target)) {
+                        sortDropdown.classList.add('hidden');
+                    }
+                });
+                
+                // Sort options handling
+                sortDropdown.querySelectorAll('button').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const sortType = button.dataset.sort;
+                        sortBookmarks(sortType);
+                        sortDropdown.classList.add('hidden');
+                    });
+                });
+                
+                // Import button
+                importBtn.addEventListener('click', () => {
+                    if (fileInput.files.length > 0) {
+                        importFromFile(fileInput.files[0]);
+                    } else if (urlInput.value.trim()) {
+                        importFromText(urlInput.value);
+                    } else {
+                        // Show error or message that no input was provided
+                        alert('Please provide a file or enter URLs to import');
+                    }
+                });
+                
+                // Search input
+                searchInput.addEventListener('input', () => {
+                    filterBookmarks();
+                });
+                
+                // Remove duplicates
+                removeDuplicatesBtn.addEventListener('click', () => {
+                    removeDuplicates();
+                });
+                
+                // Export button
+                exportBtn.addEventListener('click', () => {
+                    openExportModal();
+                });
+                
+                // Generate export
+                generateExportBtn.addEventListener('click', () => {
+                    generateExport();
+                });
+                
+                // Copy export to clipboard
+                copyExportBtn.addEventListener('click', () => {
+                    copyExportToClipboard();
+                });
+                
+                // Cancel export
+                cancelExportBtn.addEventListener('click', () => {
+                    closeExportModal();
+                });
+                
+                // Select all bookmarks
+                selectAllBtn.addEventListener('click', () => {
+                    selectAllBookmarks();
+                });
+                
+                // Deselect all bookmarks
+                deselectAllBtn.addEventListener('click', () => {
+                    deselectAllBookmarks();
+                });
+                
+                // Delete selected bookmarks
+                deleteSelectedBtn.addEventListener('click', () => {
+                    deleteSelectedBookmarks();
+                });
+                
+                // Import from file
+                function importFromFile(file) {
+                    showLoading();
+                    
+                    const reader = new FileReader();
+                    
+                    reader.onload = (e) => {
+                        const content = e.target.result;
+                        let importedBookmarks = [];
+                        
+                        if (file.name.endsWith('.html') || file.name.endsWith('.htm')) {
+                            importedBookmarks = parseHtmlBookmarks(content);
+                        } else if (file.name.endsWith('.json')) {
+                            try {
+                                const parsed = JSON.parse(content);
+                                importedBookmarks = parseJsonBookmarks(parsed);
+                            } catch (error) {
+                                console.error('Error parsing JSON:', error);
+                            }
+                        } else if (file.name.endsWith('.txt')) {
+                            importedBookmarks = parseTextBookmarks(content);
+                        }
+                        
+                        addBookmarks(importedBookmarks);
+                        hideLoading();
+                    };
+                    
+                    reader.onerror = () => {
+                        console.error('Error reading file');
+                        hideLoading();
+                    };
+                    
+                    if (file.name.endsWith('.html') || file.name.endsWith('.htm') || file.name.endsWith('.txt')) {
+                        reader.readAsText(file);
+                    } else if (file.name.endsWith('.json')) {
+                        reader.readAsText(file);
+                    } else {
+                        console.error('Unsupported file format');
+                        hideLoading();
+                    }
+                }
+                
+                // Import from text input
+                function importFromText(text) {
+                    showLoading();
+                    const importedBookmarks = parseTextBookmarks(text);
+                    addBookmarks(importedBookmarks);
+                    hideLoading();
+                }
+                
+                // Parse HTML bookmarks (browser exports)
+                function parseHtmlBookmarks(html) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const links = doc.querySelectorAll('a');
+                    
+                    return Array.from(links).map(link => {
+                        return {
+                            id: generateId(),
+                            title: link.textContent.trim() || extractDomainFromUrl(link.href),
+                            url: link.href,
+                            dateAdded: new Date().toISOString(),
+                            domain: extractDomainFromUrl(link.href)
+                        };
+                    }).filter(bookmark => isValidUrl(bookmark.url));
+                }
+                
+                // Parse JSON bookmarks
+                function parseJsonBookmarks(json) {
+                    // Try to handle different JSON bookmark formats
+                    let bookmarks = [];
+                    
+                    if (Array.isArray(json)) {
+                        // Array of bookmarks
+                        bookmarks = json.map(item => {
+                            // Try to extract URL and title from various formats
+                            let url = '';
+                            let title = '';
+                            
+                            if (typeof item === 'string') {
+                                // Simple URL string
+                                url = item;
+                                title = extractDomainFromUrl(item);
+                            } else if (typeof item === 'object') {
+                                // Object with potential properties like url, title, href, name, etc.
+                                url = item.url || item.href || item.link || '';
+                                title = item.title || item.name || item.label || extractDomainFromUrl(url);
+                            }
+                            
+                            return {
+                                id: generateId(),
+                                title: title || 'Untitled',
+                                url: url,
+                                dateAdded: new Date().toISOString(),
+                                domain: extractDomainFromUrl(url)
+                            };
+                        }).filter(bookmark => isValidUrl(bookmark.url));
+                    } else if (typeof json === 'object') {
+                        // Nested bookmark structure
+                        // Try to extract bookmarks from common browser export formats
+                        
+                        // Chrome/Firefox format with roots and children
+                        if (json.roots) {
+                            const extractBookmarksFromFolder = (folder) => {
+                                let result = [];
+                                if (folder.children) {
+                                    folder.children.forEach(child => {
+                                        if (child.type === 'url') {
+                                            result.push({
+                                                id: generateId(),
+                                                title: child.name || extractDomainFromUrl(child.url),
+                                                url: child.url,
+                                                dateAdded: new Date(child.date_added || Date.now()).toISOString(),
+                                                domain: extractDomainFromUrl(child.url)
+                                            });
+                                        } else if (child.children) {
+                                            result = result.concat(extractBookmarksFromFolder(child));
+                                        }
+                                    });
+                                }
+                                return result;
+                            };
+                            
+                            // Process all root folders
+                            for (const key in json.roots) {
+                                bookmarks = bookmarks.concat(extractBookmarksFromFolder(json.roots[key]));
+                            }
+                        }
+                    }
+                    
+                    return bookmarks;
+                }
+                
+                // Parse text bookmarks (one URL per line)
+                function parseTextBookmarks(text) {
+                    return text.split('\n')
+                        .map(line => line.trim())
+                        .filter(line => line && isValidUrl(line))
+                        .map(url => {
+                            return {
+                                id: generateId(),
+                                title: extractDomainFromUrl(url),
+                                url: url,
+                                dateAdded: new Date().toISOString(),
+                                domain: extractDomainFromUrl(url)
+                            };
+                        });
+                }
+                
+                // Add bookmarks to the list
+                function addBookmarks(newBookmarks) {
+                    if (newBookmarks.length === 0) return;
+                    
+                    // Add new bookmarks to the existing bookmarks
+                    bookmarks = [...bookmarks, ...newBookmarks];
+                    
+                    // Update UI
+                    updateBookmarkCount();
+                    renderBookmarks();
+                }
+                
+                // Render bookmarks in the UI
+                function renderBookmarks() {
+                    if (bookmarks.length === 0) {
+                        emptyState.classList.remove('hidden');
+                        bookmarkList.classList.add('hidden');
+                        return;
+                    }
+                    
+                    emptyState.classList.add('hidden');
+                    bookmarkList.classList.remove('hidden');
+                    
+                    // Clear previous bookmarks
+                    bookmarkList.innerHTML = '';
+                    
+                    // Display either filtered or all bookmarks
+                    const displayBookmarks = filteredBookmarks.length > 0 ? filteredBookmarks : bookmarks;
+                    
+                    // Add each bookmark
+                    displayBookmarks.forEach(bookmark => {
+                        const bookmarkElement = createBookmarkElement(bookmark);
+                        bookmarkList.appendChild(bookmarkElement);
+                    });
+                }
+                
+                // Create a single bookmark element
+                function createBookmarkElement(bookmark) {
+                    const bookmarkItem = document.createElement('div');
+                    bookmarkItem.className = 'bookmark-item py-1.5 px-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-sm';
+                    bookmarkItem.dataset.id = bookmark.id;
+                    
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'h-3 w-3 text-primary focus:ring-primary rounded';
+                    checkbox.checked = selectedBookmarkIds.has(bookmark.id);
+                    checkbox.addEventListener('change', () => {
+                        toggleBookmarkSelection(bookmark.id, checkbox.checked);
+                    });
+                    
+                    const faviconUrl = `https://www.google.com/s2/favicons?domain=${bookmark.domain}&sz=16`;
+                    const favicon = document.createElement('img');
+                    favicon.src = faviconUrl;
+                    favicon.className = 'w-4 h-4 flex-shrink-0';
+                    favicon.onerror = () => {
+                        // Replace with a generic icon if favicon fails to load
+                        favicon.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>';
+                        favicon.style.filter = 'invert(50%)';
+                    };
+                    
+                    const contentDiv = document.createElement('div');
+                    contentDiv.className = 'flex-1 min-w-0 flex flex-col';
+                    
+                    const titleRow = document.createElement('div');
+                    titleRow.className = 'flex items-center';
+                    
+                    const title = document.createElement('a');
+                    title.href = bookmark.url;
+                    title.target = '_blank';
+                    title.className = 'font-medium text-primary hover:underline truncate text-xs';
+                    title.textContent = bookmark.title;
+                    
+                    const date = new Date(bookmark.dateAdded);
+                    const dateSpan = document.createElement('span');
+                    dateSpan.className = 'text-[10px] text-gray-500 dark:text-gray-400 ml-auto pl-1 flex-shrink-0';
+                    dateSpan.textContent = date.toLocaleDateString();
+                    
+                    titleRow.appendChild(title);
+                    titleRow.appendChild(dateSpan);
+                    
+                    const url = document.createElement('div');
+                    url.className = 'text-[10px] text-gray-500 dark:text-gray-400 truncate';
+                    url.textContent = bookmark.url;
+                    
+                    contentDiv.appendChild(titleRow);
+                    contentDiv.appendChild(url);
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'text-gray-500 hover:text-red-500 transition-colors flex-shrink-0';
+                    deleteBtn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    `;
+                    deleteBtn.addEventListener('click', () => {
+                        deleteBookmark(bookmark.id);
+                    });
+                    
+                    bookmarkItem.appendChild(checkbox);
+                    bookmarkItem.appendChild(favicon);
+                    bookmarkItem.appendChild(contentDiv);
+                    bookmarkItem.appendChild(deleteBtn);
+                    
+                    return bookmarkItem;
+                }
+                
+                // Filter bookmarks based on search input
+                function filterBookmarks() {
+                    const searchTerm = searchInput.value.toLowerCase().trim();
+                    
+                    if (!searchTerm) {
+                        filteredBookmarks = [];
+                        renderBookmarks();
+                        return;
+                    }
+                    
+                    filteredBookmarks = bookmarks.filter(bookmark => {
+                        return (
+                            bookmark.title.toLowerCase().includes(searchTerm) ||
+                            bookmark.url.toLowerCase().includes(searchTerm) ||
+                            bookmark.domain.toLowerCase().includes(searchTerm)
+                        );
+                    });
+                    
+                    renderBookmarks();
+                }
+                
+                // Sort bookmarks
+                function sortBookmarks(sortType) {
+                    let sortedBookmarks = [...bookmarks];
+                    
+                    switch (sortType) {
+                        case 'title-asc':
+                            sortedBookmarks.sort((a, b) => a.title.localeCompare(b.title));
+                            break;
+                        case 'title-desc':
+                            sortedBookmarks.sort((a, b) => b.title.localeCompare(a.title));
+                            break;
+                        case 'domain-asc':
+                            sortedBookmarks.sort((a, b) => a.domain.localeCompare(b.domain));
+                            break;
+                        case 'date-newest':
+                            sortedBookmarks.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
+                            break;
+                        case 'date-oldest':
+                            sortedBookmarks.sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded));
+                            break;
+                    }
+                    
+                    bookmarks = sortedBookmarks;
+                    
+                    // If we're currently filtering, also sort the filtered bookmarks
+                    if (filteredBookmarks.length > 0) {
+                        let sortedFilteredBookmarks = [...filteredBookmarks];
+                        
+                        switch (sortType) {
+                            case 'title-asc':
+                                sortedFilteredBookmarks.sort((a, b) => a.title.localeCompare(b.title));
+                                break;
+                            case 'title-desc':
+                                sortedFilteredBookmarks.sort((a, b) => b.title.localeCompare(a.title));
+                                break;
+                            case 'domain-asc':
+                                sortedFilteredBookmarks.sort((a, b) => a.domain.localeCompare(b.domain));
+                                break;
+                            case 'date-newest':
+                                sortedFilteredBookmarks.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
+                                break;
+                            case 'date-oldest':
+                                sortedFilteredBookmarks.sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded));
+                                break;
+                        }
+                        
+                        filteredBookmarks = sortedFilteredBookmarks;
+                    }
+                    
+                    renderBookmarks();
+                }
+                
+                // Remove duplicate bookmarks
+                function removeDuplicates() {
+                    if (bookmarks.length === 0) return;
+                    
+                    const uniqueUrls = new Set();
+                    const uniqueBookmarks = [];
+                    
+                    bookmarks.forEach(bookmark => {
+                        if (!uniqueUrls.has(bookmark.url)) {
+                            uniqueUrls.add(bookmark.url);
+                            uniqueBookmarks.push(bookmark);
+                        } else {
+                            // If this bookmark was selected, we need to remove it from selected
+                            if (selectedBookmarkIds.has(bookmark.id)) {
+                                selectedBookmarkIds.delete(bookmark.id);
+                            }
+                        }
+                    });
+                    
+                    const removedCount = bookmarks.length - uniqueBookmarks.length;
+                    
+                    if (removedCount > 0) {
+                        bookmarks = uniqueBookmarks;
+                        
+                        // Also update filtered bookmarks if necessary
+                        if (filteredBookmarks.length > 0) {
+                            filterBookmarks();
+                        } else {
+                            renderBookmarks();
+                        }
+                        
+                        updateBookmarkCount();
+                        updateSelectedCount();
+                    }
+                }
+                
+                // Toggle bookmark selection
+                function toggleBookmarkSelection(id, isSelected) {
+                    if (isSelected) {
+                        selectedBookmarkIds.add(id);
+                    } else {
+                        selectedBookmarkIds.delete(id);
+                    }
+                    
+                    updateSelectedCount();
+                }
+                
+                // Select all bookmarks
+                function selectAllBookmarks() {
+                    const displayBookmarks = filteredBookmarks.length > 0 ? filteredBookmarks : bookmarks;
+                    
+                    displayBookmarks.forEach(bookmark => {
+                        selectedBookmarkIds.add(bookmark.id);
+                    });
+                    
+                    // Update checkboxes in the UI
+                    const checkboxes = bookmarkList.querySelectorAll('input[type="checkbox"]');
+                    checkboxes.forEach(checkbox => {
+                        checkbox.checked = true;
+                    });
+                    
+                    updateSelectedCount();
+                }
+                
+                // Deselect all bookmarks
+                function deselectAllBookmarks() {
+                    selectedBookmarkIds.clear();
+                    
+                    // Update checkboxes in the UI
+                    const checkboxes = bookmarkList.querySelectorAll('input[type="checkbox"]');
+                    checkboxes.forEach(checkbox => {
+                        checkbox.checked = false;
+                    });
+                    
+                    updateSelectedCount();
+                }
+                
+                // Delete selected bookmarks
+                function deleteSelectedBookmarks() {
+                    if (selectedBookmarkIds.size === 0) return;
+                    
+                    bookmarks = bookmarks.filter(bookmark => !selectedBookmarkIds.has(bookmark.id));
+                    
+                    // Also update filtered bookmarks if necessary
+                    if (filteredBookmarks.length > 0) {
+                        filteredBookmarks = filteredBookmarks.filter(bookmark => !selectedBookmarkIds.has(bookmark.id));
+                    }
+                    
+                    selectedBookmarkIds.clear();
+                    
+                    renderBookmarks();
+                    updateBookmarkCount();
+                    updateSelectedCount();
+                }
+                
+                // Delete a single bookmark
+                function deleteBookmark(id) {
+                    bookmarks = bookmarks.filter(bookmark => bookmark.id !== id);
+                    
+                    // Also update filtered bookmarks if necessary
+                    if (filteredBookmarks.length > 0) {
+                        filteredBookmarks = filteredBookmarks.filter(bookmark => bookmark.id !== id);
+                    }
+                    
+                    // Remove from selected if it was selected
+                    if (selectedBookmarkIds.has(id)) {
+                        selectedBookmarkIds.delete(id);
+                        updateSelectedCount();
+                    }
+                    
+                    renderBookmarks();
+                    updateBookmarkCount();
+                }
+                
+                // Open export modal
+                function openExportModal() {
+                    exportResult.classList.add('hidden');
+                    generateExportBtn.classList.remove('hidden');
+                    copyExportBtn.classList.add('hidden');
+                    exportModal.classList.remove('hidden');
+                }
+                
+                // Close export modal
+                function closeExportModal() {
+                    exportModal.classList.add('hidden');
+                }
+                
+                // Generate export content
+                function generateExport() {
+                    const format = document.getElementById('exportFormat').value;
+                    const scope = document.querySelector('input[name="exportScope"]:checked').value;
+                    
+                    let bookmarksToExport = [];
+                    
+                    if (scope === 'all') {
+                        bookmarksToExport = bookmarks;
+                    } else if (scope === 'selected') {
+                        bookmarksToExport = bookmarks.filter(bookmark => selectedBookmarkIds.has(bookmark.id));
+                    } else if (scope === 'filtered') {
+                        bookmarksToExport = filteredBookmarks.length > 0 ? filteredBookmarks : bookmarks;
+                    }
+                    
+                    if (bookmarksToExport.length === 0) {
+                        exportContent.textContent = 'No bookmarks to export';
+                        exportResult.classList.remove('hidden');
+                        return;
+                    }
+                    
+                    let exportOutput = '';
+                    
+                    if (format === 'html') {
+                        exportOutput = generateHtmlExport(bookmarksToExport);
+                    } else if (format === 'json') {
+                        exportOutput = generateJsonExport(bookmarksToExport);
+                    } else if (format === 'text') {
+                        exportOutput = generateTextExport(bookmarksToExport);
+                    }
+                    
+                    exportContent.textContent = exportOutput;
+                    exportResult.classList.remove('hidden');
+                    generateExportBtn.classList.add('hidden');
+                    copyExportBtn.classList.remove('hidden');
+                }
+                
+                // Generate HTML export
+                function generateHtmlExport(bookmarksToExport) {
+                    let html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<!-- This is an automatically generated file.
+     It will be read and overwritten.
+     DO NOT EDIT! -->
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+<TITLE>Bookmarks</TITLE>
+<H1>Bookmarks</H1>
+<DL><p>
+    <DT><H3 ADD_DATE="${Math.floor(Date.now() / 1000)}" LAST_MODIFIED="${Math.floor(Date.now() / 1000)}">Exported Bookmarks</H3>
+    <DL><p>\n`;
+                    
+                    bookmarksToExport.forEach(bookmark => {
+                        const addDate = Math.floor(new Date(bookmark.dateAdded).getTime() / 1000);
+                        html += `        <DT><A HREF="${escapeHtml(bookmark.url)}" ADD_DATE="${addDate}">${escapeHtml(bookmark.title)}</A>\n`;
+                    });
+                    
+                    html += `    </DL><p>
+</DL><p>`;
+                    
+                    return html;
+                }
+                
+                // Generate JSON export
+                function generateJsonExport(bookmarksToExport) {
+                    return JSON.stringify(bookmarksToExport, null, 2);
+                }
+                
+                // Generate text export (URLs only)
+                function generateTextExport(bookmarksToExport) {
+                    return bookmarksToExport.map(bookmark => bookmark.url).join('\n');
+                }
+                
+                // Copy export content to clipboard
+                function copyExportToClipboard() {
+                    const content = exportContent.textContent;
+                    
+                    try {
+                        navigator.clipboard.writeText(content).then(() => {
+                            // Show copied confirmation
+                            copyExportBtn.textContent = 'Copied!';
+                            setTimeout(() => {
+                                copyExportBtn.textContent = 'Copy to Clipboard';
+                            }, 2000);
+                        });
+                    } catch (err) {
+                        console.error('Failed to copy text: ', err);
+                    }
+                }
+                
+                // Update bookmark count
+                function updateBookmarkCount() {
+                    if (filteredBookmarks.length > 0) {
+                        bookmarkCount.textContent = `${filteredBookmarks.length} of ${bookmarks.length} bookmarks`;
+                    } else {
+                        bookmarkCount.textContent = `${bookmarks.length} bookmarks`;
+                    }
+                }
+                
+                // Update selected count
+                function updateSelectedCount() {
+                    selectedCount.textContent = `${selectedBookmarkIds.size} selected`;
+                }
+                
+                // Show loading state
+                function showLoading() {
+                    loadingState.classList.remove('hidden');
+                    emptyState.classList.add('hidden');
+                    bookmarkList.classList.add('hidden');
+                }
+                
+                // Hide loading state
+                function hideLoading() {
+                    loadingState.classList.add('hidden');
+                    renderBookmarks();
+                }
+                
+                // Helper functions
+                
+                // Generate a unique ID
+                function generateId() {
+                    return 'bm_' + Math.random().toString(36).substr(2, 9);
+                }
+                
+                // Extract domain from URL
+                function extractDomainFromUrl(url) {
+                    try {
+                        const urlObj = new URL(url);
+                        return urlObj.hostname;
+                    } catch (e) {
+                        return url;
+                    }
+                }
+                
+                // Check if a string is a valid URL
+                function isValidUrl(string) {
+                    try {
+                        new URL(string);
+                        return true;
+                    } catch (e) {
+                        return false;
+                    }
+                }
+                
+                // Escape HTML
+                function escapeHtml(unsafe) {
+                    return unsafe
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/"/g, "&quot;")
+                        .replace(/'/g, "&#039;");
+                }
+            });
+        </script>
+    </div>
+</body>
+</html>
