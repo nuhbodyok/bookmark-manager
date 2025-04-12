@@ -67,6 +67,32 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            background-color: #5D5CDE;
+            color: white;
+            border-radius: 4px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: transform 0.3s, opacity 0.3s;
+            z-index: 100;
+        }
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .toast.error {
+            background-color: #ef4444;
+        }
+        .toast.success {
+            background-color: #10b981;
+        }
     </style>
 </head>
 <body class="bg-white dark:bg-[#181818] text-gray-900 dark:text-gray-100 min-h-screen transition-colors duration-200">
@@ -236,6 +262,35 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Edit Bookmark Modal -->
+        <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-lg p-3 max-w-md w-full mx-4">
+                <h3 class="text-base font-bold mb-2">Edit Bookmark</h3>
+                <div class="mb-2">
+                    <label for="editTitle" class="block mb-1 text-xs font-medium">Title</label>
+                    <input type="text" id="editTitle" class="w-full px-2 py-1 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-primary">
+                </div>
+                <div class="mb-2">
+                    <label for="editUrl" class="block mb-1 text-xs font-medium">URL</label>
+                    <input type="text" id="editUrl" class="w-full px-2 py-1 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-primary">
+                </div>
+                <input type="hidden" id="editBookmarkId">
+                <div class="flex justify-end gap-1">
+                    <button id="cancelEditBtn" class="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 py-1 text-xs rounded transition-colors">
+                        Cancel
+                    </button>
+                    <button id="saveEditBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-1 text-xs rounded transition-colors">
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Toast Notification -->
+        <div id="toast" class="toast">
+            <span id="toastMessage"></span>
+        </div>
 
         <script>
             // Initialize dark mode based on system preference
@@ -278,11 +333,47 @@
                 const copyExportBtn = document.getElementById('copyExportBtn');
                 const exportResult = document.getElementById('exportResult');
                 const exportContent = document.getElementById('exportContent');
+                const editModal = document.getElementById('editModal');
+                const editTitle = document.getElementById('editTitle');
+                const editUrl = document.getElementById('editUrl');
+                const editBookmarkId = document.getElementById('editBookmarkId');
+                const saveEditBtn = document.getElementById('saveEditBtn');
+                const cancelEditBtn = document.getElementById('cancelEditBtn');
+                const toast = document.getElementById('toast');
+                const toastMessage = document.getElementById('toastMessage');
                 
                 // State
                 let bookmarks = [];
                 let filteredBookmarks = [];
                 let selectedBookmarkIds = new Set();
+                const STORAGE_KEY = 'advanced_bookmarks';
+                
+                // Load bookmarks from localStorage
+                function loadBookmarks() {
+                    try {
+                        const storedBookmarks = localStorage.getItem(STORAGE_KEY);
+                        if (storedBookmarks) {
+                            bookmarks = JSON.parse(storedBookmarks);
+                            renderBookmarks();
+                            updateBookmarkCount();
+                        }
+                    } catch (error) {
+                        console.error('Error loading bookmarks:', error);
+                        showToast('Failed to load bookmarks from storage', 'error');
+                    }
+                }
+                
+                // Save bookmarks to localStorage
+                function saveBookmarks() {
+                    try {
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(bookmarks));
+                        return true;
+                    } catch (error) {
+                        console.error('Error saving bookmarks:', error);
+                        showToast('Failed to save bookmarks to storage', 'error');
+                        return false;
+                    }
+                }
                 
                 // Theme toggle
                 themeToggle.addEventListener('click', () => {
@@ -315,6 +406,18 @@
                     if (!sortBtn.contains(e.target) && !sortDropdown.contains(e.target)) {
                         sortDropdown.classList.add('hidden');
                     }
+                    
+                    // Close export modal when clicking outside
+                    if (exportModal.classList.contains('hidden') === false && 
+                        !exportModal.querySelector('div').contains(e.target)) {
+                        closeExportModal();
+                    }
+                    
+                    // Close edit modal when clicking outside
+                    if (editModal.classList.contains('hidden') === false && 
+                        !editModal.querySelector('div').contains(e.target)) {
+                        closeEditModal();
+                    }
                 });
                 
                 // Sort options handling
@@ -333,14 +436,36 @@
                     } else if (urlInput.value.trim()) {
                         importFromText(urlInput.value);
                     } else {
-                        // Show error or message that no input was provided
-                        alert('Please provide a file or enter URLs to import');
+                        showToast('Please provide a file or enter URLs to import', 'error');
                     }
                 });
                 
                 // Search input
                 searchInput.addEventListener('input', () => {
                     filterBookmarks();
+                });
+                
+                // Enable drag and drop file upload
+                const dropZone = document.querySelector('section');
+                
+                dropZone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    dropZone.classList.add('bg-gray-200', 'dark:bg-gray-700');
+                });
+                
+                dropZone.addEventListener('dragleave', () => {
+                    dropZone.classList.remove('bg-gray-200', 'dark:bg-gray-700');
+                });
+                
+                dropZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    dropZone.classList.remove('bg-gray-200', 'dark:bg-gray-700');
+                    
+                    if (e.dataTransfer.files.length > 0) {
+                        fileInput.files = e.dataTransfer.files;
+                        fileName.textContent = e.dataTransfer.files[0].name;
+                        importFromFile(e.dataTransfer.files[0]);
+                    }
                 });
                 
                 // Remove duplicates
@@ -368,6 +493,15 @@
                     closeExportModal();
                 });
                 
+                // Edit bookmark modal buttons
+                saveEditBtn.addEventListener('click', () => {
+                    saveEditedBookmark();
+                });
+                
+                cancelEditBtn.addEventListener('click', () => {
+                    closeEditModal();
+                });
+                
                 // Select all bookmarks
                 selectAllBtn.addEventListener('click', () => {
                     selectAllBookmarks();
@@ -381,6 +515,31 @@
                 // Delete selected bookmarks
                 deleteSelectedBtn.addEventListener('click', () => {
                     deleteSelectedBookmarks();
+                });
+                
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    // Ctrl+F to focus search
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                        e.preventDefault();
+                        searchInput.focus();
+                    }
+                    
+                    // Escape to close modals
+                    if (e.key === 'Escape') {
+                        if (!exportModal.classList.contains('hidden')) {
+                            closeExportModal();
+                        }
+                        if (!editModal.classList.contains('hidden')) {
+                            closeEditModal();
+                        }
+                    }
+                    
+                    // Ctrl+S to save changes in edit modal
+                    if ((e.ctrlKey || e.metaKey) && e.key === 's' && !editModal.classList.contains('hidden')) {
+                        e.preventDefault();
+                        saveEditedBookmark();
+                    }
                 });
                 
                 // Import from file
@@ -401,17 +560,25 @@
                                 importedBookmarks = parseJsonBookmarks(parsed);
                             } catch (error) {
                                 console.error('Error parsing JSON:', error);
+                                showToast('Invalid JSON format', 'error');
                             }
                         } else if (file.name.endsWith('.txt')) {
                             importedBookmarks = parseTextBookmarks(content);
                         }
                         
-                        addBookmarks(importedBookmarks);
+                        if (importedBookmarks.length > 0) {
+                            addBookmarks(importedBookmarks);
+                            showToast(`Imported ${importedBookmarks.length} bookmarks`, 'success');
+                        } else {
+                            showToast('No valid bookmarks found in file', 'error');
+                        }
+                        
                         hideLoading();
                     };
                     
                     reader.onerror = () => {
                         console.error('Error reading file');
+                        showToast('Failed to read file', 'error');
                         hideLoading();
                     };
                     
@@ -421,6 +588,7 @@
                         reader.readAsText(file);
                     } else {
                         console.error('Unsupported file format');
+                        showToast('Unsupported file format', 'error');
                         hideLoading();
                     }
                 }
@@ -429,7 +597,15 @@
                 function importFromText(text) {
                     showLoading();
                     const importedBookmarks = parseTextBookmarks(text);
-                    addBookmarks(importedBookmarks);
+                    
+                    if (importedBookmarks.length > 0) {
+                        addBookmarks(importedBookmarks);
+                        showToast(`Imported ${importedBookmarks.length} bookmarks`, 'success');
+                        urlInput.value = ''; // Clear input after successful import
+                    } else {
+                        showToast('No valid URLs found', 'error');
+                    }
+                    
                     hideLoading();
                 }
                 
@@ -520,24 +696,45 @@
                 function parseTextBookmarks(text) {
                     return text.split('\n')
                         .map(line => line.trim())
-                        .filter(line => line && isValidUrl(line))
+                        .filter(line => line && isValidUrl(normalizeUrl(line)))
                         .map(url => {
+                            const normalizedUrl = normalizeUrl(url);
                             return {
                                 id: generateId(),
-                                title: extractDomainFromUrl(url),
-                                url: url,
+                                title: extractDomainFromUrl(normalizedUrl),
+                                url: normalizedUrl,
                                 dateAdded: new Date().toISOString(),
-                                domain: extractDomainFromUrl(url)
+                                domain: extractDomainFromUrl(normalizedUrl)
                             };
                         });
+                }
+                
+                // Normalize URL (add http:// if missing)
+                function normalizeUrl(url) {
+                    if (!/^https?:\/\//i.test(url)) {
+                        return 'http://' + url;
+                    }
+                    return url;
                 }
                 
                 // Add bookmarks to the list
                 function addBookmarks(newBookmarks) {
                     if (newBookmarks.length === 0) return;
                     
+                    // Filter out duplicates
+                    const existingUrls = new Set(bookmarks.map(bm => bm.url));
+                    const uniqueNewBookmarks = newBookmarks.filter(bm => !existingUrls.has(bm.url));
+                    
+                    if (uniqueNewBookmarks.length === 0) {
+                        showToast('All bookmarks already exist', 'error');
+                        return;
+                    }
+                    
                     // Add new bookmarks to the existing bookmarks
-                    bookmarks = [...bookmarks, ...newBookmarks];
+                    bookmarks = [...bookmarks, ...uniqueNewBookmarks];
+                    
+                    // Save to localStorage
+                    saveBookmarks();
                     
                     // Update UI
                     updateBookmarkCount();
@@ -619,8 +816,22 @@
                     contentDiv.appendChild(titleRow);
                     contentDiv.appendChild(url);
                     
+                    const actionsDiv = document.createElement('div');
+                    actionsDiv.className = 'flex items-center gap-1 flex-shrink-0';
+                    
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'text-gray-500 hover:text-primary transition-colors';
+                    editBtn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                    `;
+                    editBtn.addEventListener('click', () => {
+                        openEditModal(bookmark);
+                    });
+                    
                     const deleteBtn = document.createElement('button');
-                    deleteBtn.className = 'text-gray-500 hover:text-red-500 transition-colors flex-shrink-0';
+                    deleteBtn.className = 'text-gray-500 hover:text-red-500 transition-colors';
                     deleteBtn.innerHTML = `
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -630,12 +841,75 @@
                         deleteBookmark(bookmark.id);
                     });
                     
+                    actionsDiv.appendChild(editBtn);
+                    actionsDiv.appendChild(deleteBtn);
+                    
                     bookmarkItem.appendChild(checkbox);
                     bookmarkItem.appendChild(favicon);
                     bookmarkItem.appendChild(contentDiv);
-                    bookmarkItem.appendChild(deleteBtn);
+                    bookmarkItem.appendChild(actionsDiv);
                     
                     return bookmarkItem;
+                }
+                
+                // Edit bookmark modal
+                function openEditModal(bookmark) {
+                    editTitle.value = bookmark.title;
+                    editUrl.value = bookmark.url;
+                    editBookmarkId.value = bookmark.id;
+                    editModal.classList.remove('hidden');
+                    editTitle.focus();
+                }
+                
+                function closeEditModal() {
+                    editModal.classList.add('hidden');
+                }
+                
+                function saveEditedBookmark() {
+                    const id = editBookmarkId.value;
+                    const title = editTitle.value.trim();
+                    const url = editUrl.value.trim();
+                    
+                    if (!title) {
+                        showToast('Title cannot be empty', 'error');
+                        return;
+                    }
+                    
+                    if (!url) {
+                        showToast('URL cannot be empty', 'error');
+                        return;
+                    }
+                    
+                    if (!isValidUrl(normalizeUrl(url))) {
+                        showToast('Please enter a valid URL', 'error');
+                        return;
+                    }
+                    
+                    const normalizedUrl = normalizeUrl(url);
+                    
+                    // Find and update the bookmark
+                    const index = bookmarks.findIndex(bm => bm.id === id);
+                    if (index !== -1) {
+                        bookmarks[index].title = title;
+                        bookmarks[index].url = normalizedUrl;
+                        bookmarks[index].domain = extractDomainFromUrl(normalizedUrl);
+                        
+                        // Save changes
+                        saveBookmarks();
+                        
+                        // Update filtered bookmarks if necessary
+                        if (filteredBookmarks.length > 0) {
+                            const filteredIndex = filteredBookmarks.findIndex(bm => bm.id === id);
+                            if (filteredIndex !== -1) {
+                                filteredBookmarks[filteredIndex] = bookmarks[index];
+                            }
+                        }
+                        
+                        // Update UI
+                        renderBookmarks();
+                        closeEditModal();
+                        showToast('Bookmark updated', 'success');
+                    }
                 }
                 
                 // Filter bookmarks based on search input
@@ -645,6 +919,7 @@
                     if (!searchTerm) {
                         filteredBookmarks = [];
                         renderBookmarks();
+                        updateBookmarkCount();
                         return;
                     }
                     
@@ -657,10 +932,16 @@
                     });
                     
                     renderBookmarks();
+                    updateBookmarkCount();
                 }
                 
                 // Sort bookmarks
                 function sortBookmarks(sortType) {
+                    if (bookmarks.length <= 1) {
+                        showToast('Not enough bookmarks to sort', 'error');
+                        return;
+                    }
+                    
                     let sortedBookmarks = [...bookmarks];
                     
                     switch (sortType) {
@@ -682,6 +963,9 @@
                     }
                     
                     bookmarks = sortedBookmarks;
+                    
+                    // Save the sorted bookmarks
+                    saveBookmarks();
                     
                     // If we're currently filtering, also sort the filtered bookmarks
                     if (filteredBookmarks.length > 0) {
@@ -709,12 +993,17 @@
                     }
                     
                     renderBookmarks();
+                    showToast('Bookmarks sorted', 'success');
                 }
                 
                 // Remove duplicate bookmarks
                 function removeDuplicates() {
-                    if (bookmarks.length === 0) return;
+                    if (bookmarks.length === 0) {
+                        showToast('No bookmarks to check for duplicates', 'error');
+                        return;
+                    }
                     
+                    const originalLength = bookmarks.length;
                     const uniqueUrls = new Set();
                     const uniqueBookmarks = [];
                     
@@ -735,6 +1024,9 @@
                     if (removedCount > 0) {
                         bookmarks = uniqueBookmarks;
                         
+                        // Save the changes
+                        saveBookmarks();
+                        
                         // Also update filtered bookmarks if necessary
                         if (filteredBookmarks.length > 0) {
                             filterBookmarks();
@@ -744,6 +1036,9 @@
                         
                         updateBookmarkCount();
                         updateSelectedCount();
+                        showToast(`Removed ${removedCount} duplicate bookmark${removedCount !== 1 ? 's' : ''}`, 'success');
+                    } else {
+                        showToast('No duplicates found', 'info');
                     }
                 }
                 
@@ -762,6 +1057,11 @@
                 function selectAllBookmarks() {
                     const displayBookmarks = filteredBookmarks.length > 0 ? filteredBookmarks : bookmarks;
                     
+                    if (displayBookmarks.length === 0) {
+                        showToast('No bookmarks to select', 'error');
+                        return;
+                    }
+                    
                     displayBookmarks.forEach(bookmark => {
                         selectedBookmarkIds.add(bookmark.id);
                     });
@@ -773,10 +1073,17 @@
                     });
                     
                     updateSelectedCount();
+                    showToast(`Selected ${displayBookmarks.length} bookmark${displayBookmarks.length !== 1 ? 's' : ''}`, 'success');
                 }
                 
                 // Deselect all bookmarks
                 function deselectAllBookmarks() {
+                    if (selectedBookmarkIds.size === 0) {
+                        showToast('No bookmarks are selected', 'error');
+                        return;
+                    }
+                    
+                    const count = selectedBookmarkIds.size;
                     selectedBookmarkIds.clear();
                     
                     // Update checkboxes in the UI
@@ -786,13 +1093,21 @@
                     });
                     
                     updateSelectedCount();
+                    showToast(`Deselected ${count} bookmark${count !== 1 ? 's' : ''}`, 'success');
                 }
                 
                 // Delete selected bookmarks
                 function deleteSelectedBookmarks() {
-                    if (selectedBookmarkIds.size === 0) return;
+                    if (selectedBookmarkIds.size === 0) {
+                        showToast('No bookmarks selected', 'error');
+                        return;
+                    }
                     
+                    const count = selectedBookmarkIds.size;
                     bookmarks = bookmarks.filter(bookmark => !selectedBookmarkIds.has(bookmark.id));
+                    
+                    // Save the changes
+                    saveBookmarks();
                     
                     // Also update filtered bookmarks if necessary
                     if (filteredBookmarks.length > 0) {
@@ -804,11 +1119,21 @@
                     renderBookmarks();
                     updateBookmarkCount();
                     updateSelectedCount();
+                    showToast(`Deleted ${count} bookmark${count !== 1 ? 's' : ''}`, 'success');
                 }
                 
                 // Delete a single bookmark
                 function deleteBookmark(id) {
+                    const bookmark = bookmarks.find(bm => bm.id === id);
+                    if (!bookmark) return;
+                    
+                    const confirmDelete = confirm(`Are you sure you want to delete "${bookmark.title}"?`);
+                    if (!confirmDelete) return;
+                    
                     bookmarks = bookmarks.filter(bookmark => bookmark.id !== id);
+                    
+                    // Save the changes
+                    saveBookmarks();
                     
                     // Also update filtered bookmarks if necessary
                     if (filteredBookmarks.length > 0) {
@@ -823,10 +1148,16 @@
                     
                     renderBookmarks();
                     updateBookmarkCount();
+                    showToast('Bookmark deleted', 'success');
                 }
                 
                 // Open export modal
                 function openExportModal() {
+                    if (bookmarks.length === 0) {
+                        showToast('No bookmarks to export', 'error');
+                        return;
+                    }
+                    
                     exportResult.classList.add('hidden');
                     generateExportBtn.classList.remove('hidden');
                     copyExportBtn.classList.add('hidden');
@@ -848,6 +1179,10 @@
                     if (scope === 'all') {
                         bookmarksToExport = bookmarks;
                     } else if (scope === 'selected') {
+                        if (selectedBookmarkIds.size === 0) {
+                            showToast('No bookmarks selected for export', 'error');
+                            return;
+                        }
                         bookmarksToExport = bookmarks.filter(bookmark => selectedBookmarkIds.has(bookmark.id));
                     } else if (scope === 'filtered') {
                         bookmarksToExport = filteredBookmarks.length > 0 ? filteredBookmarks : bookmarks;
@@ -873,6 +1208,7 @@
                     exportResult.classList.remove('hidden');
                     generateExportBtn.classList.add('hidden');
                     copyExportBtn.classList.remove('hidden');
+                    showToast(`${bookmarksToExport.length} bookmarks ready for export`, 'success');
                 }
                 
                 // Generate HTML export
@@ -917,13 +1253,62 @@
                         navigator.clipboard.writeText(content).then(() => {
                             // Show copied confirmation
                             copyExportBtn.textContent = 'Copied!';
+                            showToast('Copied to clipboard!', 'success');
                             setTimeout(() => {
                                 copyExportBtn.textContent = 'Copy to Clipboard';
                             }, 2000);
+                        }).catch(err => {
+                            console.error('Failed to copy: ', err);
+                            showToast('Failed to copy to clipboard', 'error');
+                            fallbackCopy(content);
                         });
                     } catch (err) {
                         console.error('Failed to copy text: ', err);
+                        showToast('Failed to copy to clipboard', 'error');
+                        fallbackCopy(content);
                     }
+                }
+                
+                // Fallback copy method for browsers without clipboard API
+                function fallbackCopy(text) {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    textArea.style.position = 'fixed';
+                    textArea.style.left = '-9999px';
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    
+                    try {
+                        const successful = document.execCommand('copy');
+                        if (successful) {
+                            showToast('Copied to clipboard!', 'success');
+                        } else {
+                            showToast('Please copy the text manually', 'error');
+                        }
+                    } catch (err) {
+                        showToast('Please copy the text manually', 'error');
+                    }
+                    
+                    document.body.removeChild(textArea);
+                }
+                
+                // Show toast notification
+                function showToast(message, type = 'info') {
+                    toastMessage.textContent = message;
+                    toast.className = 'toast';
+                    
+                    if (type === 'error') {
+                        toast.classList.add('error');
+                    } else if (type === 'success') {
+                        toast.classList.add('success');
+                    }
+                    
+                    toast.classList.add('show');
+                    
+                    setTimeout(() => {
+                        toast.classList.remove('show');
+                    }, 3000);
                 }
                 
                 // Update bookmark count
@@ -989,6 +1374,9 @@
                         .replace(/"/g, "&quot;")
                         .replace(/'/g, "&#039;");
                 }
+                
+                // Initialize the app
+                loadBookmarks();
             });
         </script>
     </div>
