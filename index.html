@@ -1,1384 +1,1894 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Bookmark Manager</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#5D5CDE',
-                        'primary-dark': '#4A49B8',
-                        'primary-light': '#7E7DE5',
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        /* Custom scrollbar for bookmark list */
-        .bookmark-list::-webkit-scrollbar {
-            width: 8px;
-        }
-        .bookmark-list::-webkit-scrollbar-track {
-            background: #f1f1f1;
-        }
-        .dark .bookmark-list::-webkit-scrollbar-track {
-            background: #2d2d2d;
-        }
-        .bookmark-list::-webkit-scrollbar-thumb {
-            background: #ccc;
-            border-radius: 10px;
-        }
-        .dark .bookmark-list::-webkit-scrollbar-thumb {
-            background: #555;
-        }
-        .bookmark-list::-webkit-scrollbar-thumb:hover {
-            background: #aaa;
-        }
-        .dark .bookmark-list::-webkit-scrollbar-thumb:hover {
-            background: #777;
-        }
-        
-        /* Animation for add/remove bookmarks */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .bookmark-item {
-            animation: fadeIn 0.3s ease-out forwards;
-        }
-        
-        /* Loading spinner */
-        .spinner {
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top: 3px solid #5D5CDE;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        /* Toast notification */
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 10px 15px;
-            background-color: #5D5CDE;
-            color: white;
-            border-radius: 4px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transform: translateY(100px);
-            opacity: 0;
-            transition: transform 0.3s, opacity 0.3s;
-            z-index: 100;
-        }
-        .toast.show {
-            transform: translateY(0);
-            opacity: 1;
-        }
-        .toast.error {
-            background-color: #ef4444;
-        }
-        .toast.success {
-            background-color: #10b981;
-        }
-    </style>
-</head>
-<body class="bg-white dark:bg-[#181818] text-gray-900 dark:text-gray-100 min-h-screen transition-colors duration-200">
-    <div class="container mx-auto px-4 py-6 max-w-screen-xl">
-        <!-- Header -->
-        <header class="flex justify-between items-center mb-3">
-            <h1 class="text-xl md:text-2xl font-bold text-primary dark:text-primary-light">
-                Advanced Bookmark Manager
-            </h1>
-            <button id="themeToggle" class="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden dark:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-            </button>
-        </header>
-        
-        <!-- Import Section -->
-        <section class="mb-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
-            <h2 class="text-base font-semibold mb-2">Import Bookmarks</h2>
-            <div class="flex flex-col md:flex-row gap-2">
-                <div class="flex-1">
-                    <label class="block mb-1 text-xs font-medium">Upload Bookmark File</label>
-                    <div class="flex">
-                        <input type="file" id="fileInput" accept=".html,.htm,.json,.txt" class="hidden" />
-                        <label for="fileInput" class="cursor-pointer flex-1 bg-primary hover:bg-primary-dark text-white px-2 py-1 text-sm rounded-l-md text-center transition-colors">
-                            Choose File
-                        </label>
-                        <span id="fileName" class="bg-white dark:bg-gray-700 px-2 py-1 text-sm rounded-r-md border border-gray-300 dark:border-gray-600 flex-1 truncate">
-                            No file chosen
-                        </span>
-                    </div>
-                    <p class="text-xs mt-0.5 text-gray-600 dark:text-gray-400">
-                        Supports browser exports (HTML), JSON, and plain text URL lists
-                    </p>
-                </div>
-                
-                <div class="flex-1">
-                    <label for="urlInput" class="block mb-1 text-xs font-medium">Paste URLs (one per line)</label>
-                    <textarea id="urlInput" rows="2" class="w-full px-2 py-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-primary"></textarea>
-                </div>
-            </div>
-            
-            <div class="mt-2 flex flex-wrap gap-1">
-                <button id="importBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-1 text-sm rounded-md transition-colors">
-                    Import Bookmarks
-                </button>
-                <button id="clearInputBtn" class="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 py-1 text-sm rounded-md transition-colors">
-                    Clear Input
-                </button>
-            </div>
-        </section>
-        
-        <!-- Management Toolbar -->
-        <section class="mb-2 sticky top-0 z-10 bg-white dark:bg-[#181818] py-1">
-            <div class="flex flex-wrap items-center gap-1 mb-1">
-                <button id="removeDuplicatesBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-0.5 rounded text-xs transition-colors">
-                    Remove Duplicates
-                </button>
-                <div class="relative">
-                    <button id="sortBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-0.5 rounded text-xs transition-colors flex items-center">
-                        Sort
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                    </button>
-                    <div id="sortDropdown" class="hidden absolute left-0 mt-1 w-40 bg-white dark:bg-gray-800 rounded shadow-lg z-20 border border-gray-200 dark:border-gray-700 text-xs">
-                        <button data-sort="title-asc" class="block px-2 py-1 text-xs w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Title (A-Z)</button>
-                        <button data-sort="title-desc" class="block px-2 py-1 text-xs w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Title (Z-A)</button>
-                        <button data-sort="domain-asc" class="block px-2 py-1 text-xs w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Domain (A-Z)</button>
-                        <button data-sort="date-newest" class="block px-2 py-1 text-xs w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Date Added (Newest)</button>
-                        <button data-sort="date-oldest" class="block px-2 py-1 text-xs w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Date Added (Oldest)</button>
-                    </div>
-                </div>
-                <button id="exportBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-0.5 rounded text-xs transition-colors">
-                    Export
-                </button>
-                <button id="selectAllBtn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 py-0.5 rounded text-xs transition-colors">
-                    Select All
-                </button>
-                <button id="deselectAllBtn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 py-0.5 rounded text-xs transition-colors">
-                    Deselect All
-                </button>
-                <button id="deleteSelectedBtn" class="bg-red-500 hover:bg-red-600 text-white px-2 py-0.5 rounded text-xs transition-colors">
-                    Delete Selected
-                </button>
-                <div class="relative ml-auto">
-                    <input id="searchInput" type="text" placeholder="Search..." class="w-full md:w-48 pl-6 pr-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-primary">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                </div>
-            </div>
-            <div class="flex justify-between items-center text-xs">
-                <span id="bookmarkCount" class="text-gray-600 dark:text-gray-400">0 bookmarks</span>
-                <span id="selectedCount" class="text-gray-600 dark:text-gray-400">0 selected</span>
-            </div>
-        </section>
-        
-        <!-- Bookmark Library -->
-        <section class="mb-3 p-2 bg-gray-100 dark:bg-gray-800 rounded-lg min-h-[400px]">
-            <div id="emptyState" class="text-center py-8">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                </svg>
-                <h3 class="mt-3 text-lg font-medium text-gray-600 dark:text-gray-400">No bookmarks yet</h3>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-500">Import your bookmarks to get started</p>
-            </div>
-            
-            <div id="bookmarkList" class="hidden bookmark-list max-h-[600px] overflow-y-auto">
-                <!-- Bookmark items will be populated here -->
-            </div>
-            
-            <div id="loadingState" class="hidden text-center py-6">
-                <div class="spinner mx-auto mb-2"></div>
-                <p class="text-sm text-gray-600 dark:text-gray-400">Processing bookmarks...</p>
-            </div>
-        </section>
-        
-        <!-- Export Modal -->
-        <div id="exportModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-            <div class="bg-white dark:bg-gray-800 rounded-lg p-3 max-w-md w-full mx-4">
-                <h3 class="text-base font-bold mb-2">Export Bookmarks</h3>
-                <div class="mb-2">
-                    <label class="block mb-1 text-xs font-medium">Export Format</label>
-                    <select id="exportFormat" class="w-full px-2 py-1 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-primary">
-                        <option value="html">HTML (Browser Import)</option>
-                        <option value="json">JSON</option>
-                        <option value="text">Plain Text (URLs only)</option>
-                    </select>
-                </div>
-                <div class="mb-2">
-                    <label class="block mb-1 text-xs font-medium">Export Scope</label>
-                    <div class="space-y-1 text-xs">
-                        <label class="flex items-center">
-                            <input type="radio" name="exportScope" value="all" checked class="mr-1 h-3 w-3">
-                            All bookmarks
-                        </label>
-                        <label class="flex items-center">
-                            <input type="radio" name="exportScope" value="selected" class="mr-1 h-3 w-3">
-                            Selected bookmarks only
-                        </label>
-                        <label class="flex items-center">
-                            <input type="radio" name="exportScope" value="filtered" class="mr-1 h-3 w-3">
-                            Current filtered view
-                        </label>
-                    </div>
-                </div>
-                <div id="exportResult" class="mb-2 p-2 bg-gray-100 dark:bg-gray-700 rounded max-h-32 overflow-y-auto hidden">
-                    <pre id="exportContent" class="text-[10px] whitespace-pre-wrap"></pre>
-                </div>
-                <p class="mb-2 text-xs text-gray-600 dark:text-gray-400">
-                    To save the exported content, copy it and save to a file, or use your browser's "Save As" function.
-                </p>
-                <div class="flex justify-end gap-1">
-                    <button id="cancelExportBtn" class="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 py-1 text-xs rounded transition-colors">
-                        Cancel
-                    </button>
-                    <button id="generateExportBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-1 text-xs rounded transition-colors">
-                        Generate Export
-                    </button>
-                    <button id="copyExportBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-1 text-xs rounded transition-colors hidden">
-                        Copy to Clipboard
-                    </button>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Edit Bookmark Modal -->
-        <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-            <div class="bg-white dark:bg-gray-800 rounded-lg p-3 max-w-md w-full mx-4">
-                <h3 class="text-base font-bold mb-2">Edit Bookmark</h3>
-                <div class="mb-2">
-                    <label for="editTitle" class="block mb-1 text-xs font-medium">Title</label>
-                    <input type="text" id="editTitle" class="w-full px-2 py-1 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-primary">
-                </div>
-                <div class="mb-2">
-                    <label for="editUrl" class="block mb-1 text-xs font-medium">URL</label>
-                    <input type="text" id="editUrl" class="w-full px-2 py-1 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-primary">
-                </div>
-                <input type="hidden" id="editBookmarkId">
-                <div class="flex justify-end gap-1">
-                    <button id="cancelEditBtn" class="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 py-1 text-xs rounded transition-colors">
-                        Cancel
-                    </button>
-                    <button id="saveEditBtn" class="bg-primary hover:bg-primary-dark text-white px-2 py-1 text-xs rounded transition-colors">
-                        Save Changes
-                    </button>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Toast Notification -->
-        <div id="toast" class="toast">
-            <span id="toastMessage"></span>
-        </div>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bookmark Manager</title>
+<style>
+/* ── Reset & Base ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg0:      #0f0f10;
+  --bg1:      #161618;
+  --bg2:      #1c1c1f;
+  --bg3:      #242428;
+  --bg4:      #2c2c31;
+  --border:   #2e2e34;
+  --border2:  #3a3a42;
+  --text0:    #e8e8ee;
+  --text1:    #aaaabc;
+  --text2:    #6b6b80;
+  --accent:   #6c6cff;
+  --accent2:  #5555dd;
+  --accent3:  #8888ff;
+  --green:    #3dba74;
+  --red:      #e05252;
+  --yellow:   #e0a832;
+  --radius:   4px;
+  --font:     'Consolas', 'Monaco', 'Cascadia Code', monospace;
+}
+html { font-size: 13px; }
+body {
+  font-family: var(--font);
+  background: var(--bg0);
+  color: var(--text0);
+  min-height: 100vh;
+  line-height: 1.4;
+}
+input, textarea, select, button {
+  font-family: var(--font);
+  font-size: 12px;
+}
+button { cursor: pointer; }
+a { color: var(--accent3); text-decoration: none; }
+a:hover { text-decoration: underline; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg1); }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border2); }
 
-        <script>
-            // Initialize dark mode based on system preference
-            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                document.documentElement.classList.add('dark');
-            }
-            
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
-                if (event.matches) {
-                    document.documentElement.classList.add('dark');
-                } else {
-                    document.documentElement.classList.remove('dark');
-                }
-            });
-            
-            document.addEventListener('DOMContentLoaded', () => {
-                // DOM Elements
-                const themeToggle = document.getElementById('themeToggle');
-                const fileInput = document.getElementById('fileInput');
-                const fileName = document.getElementById('fileName');
-                const urlInput = document.getElementById('urlInput');
-                const importBtn = document.getElementById('importBtn');
-                const clearInputBtn = document.getElementById('clearInputBtn');
-                const searchInput = document.getElementById('searchInput');
-                const removeDuplicatesBtn = document.getElementById('removeDuplicatesBtn');
-                const sortBtn = document.getElementById('sortBtn');
-                const sortDropdown = document.getElementById('sortDropdown');
-                const exportBtn = document.getElementById('exportBtn');
-                const selectAllBtn = document.getElementById('selectAllBtn');
-                const deselectAllBtn = document.getElementById('deselectAllBtn');
-                const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
-                const bookmarkCount = document.getElementById('bookmarkCount');
-                const selectedCount = document.getElementById('selectedCount');
-                const emptyState = document.getElementById('emptyState');
-                const bookmarkList = document.getElementById('bookmarkList');
-                const loadingState = document.getElementById('loadingState');
-                const exportModal = document.getElementById('exportModal');
-                const cancelExportBtn = document.getElementById('cancelExportBtn');
-                const generateExportBtn = document.getElementById('generateExportBtn');
-                const copyExportBtn = document.getElementById('copyExportBtn');
-                const exportResult = document.getElementById('exportResult');
-                const exportContent = document.getElementById('exportContent');
-                const editModal = document.getElementById('editModal');
-                const editTitle = document.getElementById('editTitle');
-                const editUrl = document.getElementById('editUrl');
-                const editBookmarkId = document.getElementById('editBookmarkId');
-                const saveEditBtn = document.getElementById('saveEditBtn');
-                const cancelEditBtn = document.getElementById('cancelEditBtn');
-                const toast = document.getElementById('toast');
-                const toastMessage = document.getElementById('toastMessage');
-                
-                // State
-                let bookmarks = [];
-                let filteredBookmarks = [];
-                let selectedBookmarkIds = new Set();
-                const STORAGE_KEY = 'advanced_bookmarks';
-                
-                // Load bookmarks from localStorage
-                function loadBookmarks() {
-                    try {
-                        const storedBookmarks = localStorage.getItem(STORAGE_KEY);
-                        if (storedBookmarks) {
-                            bookmarks = JSON.parse(storedBookmarks);
-                            renderBookmarks();
-                            updateBookmarkCount();
-                        }
-                    } catch (error) {
-                        console.error('Error loading bookmarks:', error);
-                        showToast('Failed to load bookmarks from storage', 'error');
-                    }
-                }
-                
-                // Save bookmarks to localStorage
-                function saveBookmarks() {
-                    try {
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(bookmarks));
-                        return true;
-                    } catch (error) {
-                        console.error('Error saving bookmarks:', error);
-                        showToast('Failed to save bookmarks to storage', 'error');
-                        return false;
-                    }
-                }
-                
-                // Theme toggle
-                themeToggle.addEventListener('click', () => {
-                    document.documentElement.classList.toggle('dark');
-                });
-                
-                // File input handling
-                fileInput.addEventListener('change', (e) => {
-                    if (e.target.files.length > 0) {
-                        fileName.textContent = e.target.files[0].name;
-                    } else {
-                        fileName.textContent = 'No file chosen';
-                    }
-                });
-                
-                // Clear input button
-                clearInputBtn.addEventListener('click', () => {
-                    fileInput.value = '';
-                    fileName.textContent = 'No file chosen';
-                    urlInput.value = '';
-                });
-                
-                // Show/hide sort dropdown
-                sortBtn.addEventListener('click', () => {
-                    sortDropdown.classList.toggle('hidden');
-                });
-                
-                // Close sort dropdown when clicking outside
-                document.addEventListener('click', (e) => {
-                    if (!sortBtn.contains(e.target) && !sortDropdown.contains(e.target)) {
-                        sortDropdown.classList.add('hidden');
-                    }
-                    
-                    // Close export modal when clicking outside
-                    if (exportModal.classList.contains('hidden') === false && 
-                        !exportModal.querySelector('div').contains(e.target)) {
-                        closeExportModal();
-                    }
-                    
-                    // Close edit modal when clicking outside
-                    if (editModal.classList.contains('hidden') === false && 
-                        !editModal.querySelector('div').contains(e.target)) {
-                        closeEditModal();
-                    }
-                });
-                
-                // Sort options handling
-                sortDropdown.querySelectorAll('button').forEach(button => {
-                    button.addEventListener('click', () => {
-                        const sortType = button.dataset.sort;
-                        sortBookmarks(sortType);
-                        sortDropdown.classList.add('hidden');
-                    });
-                });
-                
-                // Import button
-                importBtn.addEventListener('click', () => {
-                    if (fileInput.files.length > 0) {
-                        importFromFile(fileInput.files[0]);
-                    } else if (urlInput.value.trim()) {
-                        importFromText(urlInput.value);
-                    } else {
-                        showToast('Please provide a file or enter URLs to import', 'error');
-                    }
-                });
-                
-                // Search input
-                searchInput.addEventListener('input', () => {
-                    filterBookmarks();
-                });
-                
-                // Enable drag and drop file upload
-                const dropZone = document.querySelector('section');
-                
-                dropZone.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    dropZone.classList.add('bg-gray-200', 'dark:bg-gray-700');
-                });
-                
-                dropZone.addEventListener('dragleave', () => {
-                    dropZone.classList.remove('bg-gray-200', 'dark:bg-gray-700');
-                });
-                
-                dropZone.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    dropZone.classList.remove('bg-gray-200', 'dark:bg-gray-700');
-                    
-                    if (e.dataTransfer.files.length > 0) {
-                        fileInput.files = e.dataTransfer.files;
-                        fileName.textContent = e.dataTransfer.files[0].name;
-                        importFromFile(e.dataTransfer.files[0]);
-                    }
-                });
-                
-                // Remove duplicates
-                removeDuplicatesBtn.addEventListener('click', () => {
-                    removeDuplicates();
-                });
-                
-                // Export button
-                exportBtn.addEventListener('click', () => {
-                    openExportModal();
-                });
-                
-                // Generate export
-                generateExportBtn.addEventListener('click', () => {
-                    generateExport();
-                });
-                
-                // Copy export to clipboard
-                copyExportBtn.addEventListener('click', () => {
-                    copyExportToClipboard();
-                });
-                
-                // Cancel export
-                cancelExportBtn.addEventListener('click', () => {
-                    closeExportModal();
-                });
-                
-                // Edit bookmark modal buttons
-                saveEditBtn.addEventListener('click', () => {
-                    saveEditedBookmark();
-                });
-                
-                cancelEditBtn.addEventListener('click', () => {
-                    closeEditModal();
-                });
-                
-                // Select all bookmarks
-                selectAllBtn.addEventListener('click', () => {
-                    selectAllBookmarks();
-                });
-                
-                // Deselect all bookmarks
-                deselectAllBtn.addEventListener('click', () => {
-                    deselectAllBookmarks();
-                });
-                
-                // Delete selected bookmarks
-                deleteSelectedBtn.addEventListener('click', () => {
-                    deleteSelectedBookmarks();
-                });
-                
-                // Keyboard shortcuts
-                document.addEventListener('keydown', (e) => {
-                    // Ctrl+F to focus search
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-                        e.preventDefault();
-                        searchInput.focus();
-                    }
-                    
-                    // Escape to close modals
-                    if (e.key === 'Escape') {
-                        if (!exportModal.classList.contains('hidden')) {
-                            closeExportModal();
-                        }
-                        if (!editModal.classList.contains('hidden')) {
-                            closeEditModal();
-                        }
-                    }
-                    
-                    // Ctrl+S to save changes in edit modal
-                    if ((e.ctrlKey || e.metaKey) && e.key === 's' && !editModal.classList.contains('hidden')) {
-                        e.preventDefault();
-                        saveEditedBookmark();
-                    }
-                });
-                
-                // Import from file
-                function importFromFile(file) {
-                    showLoading();
-                    
-                    const reader = new FileReader();
-                    
-                    reader.onload = (e) => {
-                        const content = e.target.result;
-                        let importedBookmarks = [];
-                        
-                        if (file.name.endsWith('.html') || file.name.endsWith('.htm')) {
-                            importedBookmarks = parseHtmlBookmarks(content);
-                        } else if (file.name.endsWith('.json')) {
-                            try {
-                                const parsed = JSON.parse(content);
-                                importedBookmarks = parseJsonBookmarks(parsed);
-                            } catch (error) {
-                                console.error('Error parsing JSON:', error);
-                                showToast('Invalid JSON format', 'error');
-                            }
-                        } else if (file.name.endsWith('.txt')) {
-                            importedBookmarks = parseTextBookmarks(content);
-                        }
-                        
-                        if (importedBookmarks.length > 0) {
-                            addBookmarks(importedBookmarks);
-                            showToast(`Imported ${importedBookmarks.length} bookmarks`, 'success');
-                        } else {
-                            showToast('No valid bookmarks found in file', 'error');
-                        }
-                        
-                        hideLoading();
-                    };
-                    
-                    reader.onerror = () => {
-                        console.error('Error reading file');
-                        showToast('Failed to read file', 'error');
-                        hideLoading();
-                    };
-                    
-                    if (file.name.endsWith('.html') || file.name.endsWith('.htm') || file.name.endsWith('.txt')) {
-                        reader.readAsText(file);
-                    } else if (file.name.endsWith('.json')) {
-                        reader.readAsText(file);
-                    } else {
-                        console.error('Unsupported file format');
-                        showToast('Unsupported file format', 'error');
-                        hideLoading();
-                    }
-                }
-                
-                // Import from text input
-                function importFromText(text) {
-                    showLoading();
-                    const importedBookmarks = parseTextBookmarks(text);
-                    
-                    if (importedBookmarks.length > 0) {
-                        addBookmarks(importedBookmarks);
-                        showToast(`Imported ${importedBookmarks.length} bookmarks`, 'success');
-                        urlInput.value = ''; // Clear input after successful import
-                    } else {
-                        showToast('No valid URLs found', 'error');
-                    }
-                    
-                    hideLoading();
-                }
-                
-                // Parse HTML bookmarks (browser exports)
-                function parseHtmlBookmarks(html) {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    const links = doc.querySelectorAll('a');
-                    
-                    return Array.from(links).map(link => {
-                        return {
-                            id: generateId(),
-                            title: link.textContent.trim() || extractDomainFromUrl(link.href),
-                            url: link.href,
-                            dateAdded: new Date().toISOString(),
-                            domain: extractDomainFromUrl(link.href)
-                        };
-                    }).filter(bookmark => isValidUrl(bookmark.url));
-                }
-                
-                // Parse JSON bookmarks
-                function parseJsonBookmarks(json) {
-                    // Try to handle different JSON bookmark formats
-                    let bookmarks = [];
-                    
-                    if (Array.isArray(json)) {
-                        // Array of bookmarks
-                        bookmarks = json.map(item => {
-                            // Try to extract URL and title from various formats
-                            let url = '';
-                            let title = '';
-                            
-                            if (typeof item === 'string') {
-                                // Simple URL string
-                                url = item;
-                                title = extractDomainFromUrl(item);
-                            } else if (typeof item === 'object') {
-                                // Object with potential properties like url, title, href, name, etc.
-                                url = item.url || item.href || item.link || '';
-                                title = item.title || item.name || item.label || extractDomainFromUrl(url);
-                            }
-                            
-                            return {
-                                id: generateId(),
-                                title: title || 'Untitled',
-                                url: url,
-                                dateAdded: new Date().toISOString(),
-                                domain: extractDomainFromUrl(url)
-                            };
-                        }).filter(bookmark => isValidUrl(bookmark.url));
-                    } else if (typeof json === 'object') {
-                        // Nested bookmark structure
-                        // Try to extract bookmarks from common browser export formats
-                        
-                        // Chrome/Firefox format with roots and children
-                        if (json.roots) {
-                            const extractBookmarksFromFolder = (folder) => {
-                                let result = [];
-                                if (folder.children) {
-                                    folder.children.forEach(child => {
-                                        if (child.type === 'url') {
-                                            result.push({
-                                                id: generateId(),
-                                                title: child.name || extractDomainFromUrl(child.url),
-                                                url: child.url,
-                                                dateAdded: new Date(child.date_added || Date.now()).toISOString(),
-                                                domain: extractDomainFromUrl(child.url)
-                                            });
-                                        } else if (child.children) {
-                                            result = result.concat(extractBookmarksFromFolder(child));
-                                        }
-                                    });
-                                }
-                                return result;
-                            };
-                            
-                            // Process all root folders
-                            for (const key in json.roots) {
-                                bookmarks = bookmarks.concat(extractBookmarksFromFolder(json.roots[key]));
-                            }
-                        }
-                    }
-                    
-                    return bookmarks;
-                }
-                
-                // Parse text bookmarks (one URL per line)
-                function parseTextBookmarks(text) {
-                    return text.split('\n')
-                        .map(line => line.trim())
-                        .filter(line => line && isValidUrl(normalizeUrl(line)))
-                        .map(url => {
-                            const normalizedUrl = normalizeUrl(url);
-                            return {
-                                id: generateId(),
-                                title: extractDomainFromUrl(normalizedUrl),
-                                url: normalizedUrl,
-                                dateAdded: new Date().toISOString(),
-                                domain: extractDomainFromUrl(normalizedUrl)
-                            };
-                        });
-                }
-                
-                // Normalize URL (add http:// if missing)
-                function normalizeUrl(url) {
-                    if (!/^https?:\/\//i.test(url)) {
-                        return 'http://' + url;
-                    }
-                    return url;
-                }
-                
-                // Add bookmarks to the list
-                function addBookmarks(newBookmarks) {
-                    if (newBookmarks.length === 0) return;
-                    
-                    // Filter out duplicates
-                    const existingUrls = new Set(bookmarks.map(bm => bm.url));
-                    const uniqueNewBookmarks = newBookmarks.filter(bm => !existingUrls.has(bm.url));
-                    
-                    if (uniqueNewBookmarks.length === 0) {
-                        showToast('All bookmarks already exist', 'error');
-                        return;
-                    }
-                    
-                    // Add new bookmarks to the existing bookmarks
-                    bookmarks = [...bookmarks, ...uniqueNewBookmarks];
-                    
-                    // Save to localStorage
-                    saveBookmarks();
-                    
-                    // Update UI
-                    updateBookmarkCount();
-                    renderBookmarks();
-                }
-                
-                // Render bookmarks in the UI
-                function renderBookmarks() {
-                    if (bookmarks.length === 0) {
-                        emptyState.classList.remove('hidden');
-                        bookmarkList.classList.add('hidden');
-                        return;
-                    }
-                    
-                    emptyState.classList.add('hidden');
-                    bookmarkList.classList.remove('hidden');
-                    
-                    // Clear previous bookmarks
-                    bookmarkList.innerHTML = '';
-                    
-                    // Display either filtered or all bookmarks
-                    const displayBookmarks = filteredBookmarks.length > 0 ? filteredBookmarks : bookmarks;
-                    
-                    // Add each bookmark
-                    displayBookmarks.forEach(bookmark => {
-                        const bookmarkElement = createBookmarkElement(bookmark);
-                        bookmarkList.appendChild(bookmarkElement);
-                    });
-                }
-                
-                // Create a single bookmark element
-                function createBookmarkElement(bookmark) {
-                    const bookmarkItem = document.createElement('div');
-                    bookmarkItem.className = 'bookmark-item py-1.5 px-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-sm';
-                    bookmarkItem.dataset.id = bookmark.id;
-                    
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.className = 'h-3 w-3 text-primary focus:ring-primary rounded';
-                    checkbox.checked = selectedBookmarkIds.has(bookmark.id);
-                    checkbox.addEventListener('change', () => {
-                        toggleBookmarkSelection(bookmark.id, checkbox.checked);
-                    });
-                    
-                    const faviconUrl = `https://www.google.com/s2/favicons?domain=${bookmark.domain}&sz=16`;
-                    const favicon = document.createElement('img');
-                    favicon.src = faviconUrl;
-                    favicon.className = 'w-4 h-4 flex-shrink-0';
-                    favicon.onerror = () => {
-                        // Replace with a generic icon if favicon fails to load
-                        favicon.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>';
-                        favicon.style.filter = 'invert(50%)';
-                    };
-                    
-                    const contentDiv = document.createElement('div');
-                    contentDiv.className = 'flex-1 min-w-0 flex flex-col';
-                    
-                    const titleRow = document.createElement('div');
-                    titleRow.className = 'flex items-center';
-                    
-                    const title = document.createElement('a');
-                    title.href = bookmark.url;
-                    title.target = '_blank';
-                    title.className = 'font-medium text-primary hover:underline truncate text-xs';
-                    title.textContent = bookmark.title;
-                    
-                    const date = new Date(bookmark.dateAdded);
-                    const dateSpan = document.createElement('span');
-                    dateSpan.className = 'text-[10px] text-gray-500 dark:text-gray-400 ml-auto pl-1 flex-shrink-0';
-                    dateSpan.textContent = date.toLocaleDateString();
-                    
-                    titleRow.appendChild(title);
-                    titleRow.appendChild(dateSpan);
-                    
-                    const url = document.createElement('div');
-                    url.className = 'text-[10px] text-gray-500 dark:text-gray-400 truncate';
-                    url.textContent = bookmark.url;
-                    
-                    contentDiv.appendChild(titleRow);
-                    contentDiv.appendChild(url);
-                    
-                    const actionsDiv = document.createElement('div');
-                    actionsDiv.className = 'flex items-center gap-1 flex-shrink-0';
-                    
-                    const editBtn = document.createElement('button');
-                    editBtn.className = 'text-gray-500 hover:text-primary transition-colors';
-                    editBtn.innerHTML = `
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                    `;
-                    editBtn.addEventListener('click', () => {
-                        openEditModal(bookmark);
-                    });
-                    
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.className = 'text-gray-500 hover:text-red-500 transition-colors';
-                    deleteBtn.innerHTML = `
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                    `;
-                    deleteBtn.addEventListener('click', () => {
-                        deleteBookmark(bookmark.id);
-                    });
-                    
-                    actionsDiv.appendChild(editBtn);
-                    actionsDiv.appendChild(deleteBtn);
-                    
-                    bookmarkItem.appendChild(checkbox);
-                    bookmarkItem.appendChild(favicon);
-                    bookmarkItem.appendChild(contentDiv);
-                    bookmarkItem.appendChild(actionsDiv);
-                    
-                    return bookmarkItem;
-                }
-                
-                // Edit bookmark modal
-                function openEditModal(bookmark) {
-                    editTitle.value = bookmark.title;
-                    editUrl.value = bookmark.url;
-                    editBookmarkId.value = bookmark.id;
-                    editModal.classList.remove('hidden');
-                    editTitle.focus();
-                }
-                
-                function closeEditModal() {
-                    editModal.classList.add('hidden');
-                }
-                
-                function saveEditedBookmark() {
-                    const id = editBookmarkId.value;
-                    const title = editTitle.value.trim();
-                    const url = editUrl.value.trim();
-                    
-                    if (!title) {
-                        showToast('Title cannot be empty', 'error');
-                        return;
-                    }
-                    
-                    if (!url) {
-                        showToast('URL cannot be empty', 'error');
-                        return;
-                    }
-                    
-                    if (!isValidUrl(normalizeUrl(url))) {
-                        showToast('Please enter a valid URL', 'error');
-                        return;
-                    }
-                    
-                    const normalizedUrl = normalizeUrl(url);
-                    
-                    // Find and update the bookmark
-                    const index = bookmarks.findIndex(bm => bm.id === id);
-                    if (index !== -1) {
-                        bookmarks[index].title = title;
-                        bookmarks[index].url = normalizedUrl;
-                        bookmarks[index].domain = extractDomainFromUrl(normalizedUrl);
-                        
-                        // Save changes
-                        saveBookmarks();
-                        
-                        // Update filtered bookmarks if necessary
-                        if (filteredBookmarks.length > 0) {
-                            const filteredIndex = filteredBookmarks.findIndex(bm => bm.id === id);
-                            if (filteredIndex !== -1) {
-                                filteredBookmarks[filteredIndex] = bookmarks[index];
-                            }
-                        }
-                        
-                        // Update UI
-                        renderBookmarks();
-                        closeEditModal();
-                        showToast('Bookmark updated', 'success');
-                    }
-                }
-                
-                // Filter bookmarks based on search input
-                function filterBookmarks() {
-                    const searchTerm = searchInput.value.toLowerCase().trim();
-                    
-                    if (!searchTerm) {
-                        filteredBookmarks = [];
-                        renderBookmarks();
-                        updateBookmarkCount();
-                        return;
-                    }
-                    
-                    filteredBookmarks = bookmarks.filter(bookmark => {
-                        return (
-                            bookmark.title.toLowerCase().includes(searchTerm) ||
-                            bookmark.url.toLowerCase().includes(searchTerm) ||
-                            bookmark.domain.toLowerCase().includes(searchTerm)
-                        );
-                    });
-                    
-                    renderBookmarks();
-                    updateBookmarkCount();
-                }
-                
-                // Sort bookmarks
-                function sortBookmarks(sortType) {
-                    if (bookmarks.length <= 1) {
-                        showToast('Not enough bookmarks to sort', 'error');
-                        return;
-                    }
-                    
-                    let sortedBookmarks = [...bookmarks];
-                    
-                    switch (sortType) {
-                        case 'title-asc':
-                            sortedBookmarks.sort((a, b) => a.title.localeCompare(b.title));
-                            break;
-                        case 'title-desc':
-                            sortedBookmarks.sort((a, b) => b.title.localeCompare(a.title));
-                            break;
-                        case 'domain-asc':
-                            sortedBookmarks.sort((a, b) => a.domain.localeCompare(b.domain));
-                            break;
-                        case 'date-newest':
-                            sortedBookmarks.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
-                            break;
-                        case 'date-oldest':
-                            sortedBookmarks.sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded));
-                            break;
-                    }
-                    
-                    bookmarks = sortedBookmarks;
-                    
-                    // Save the sorted bookmarks
-                    saveBookmarks();
-                    
-                    // If we're currently filtering, also sort the filtered bookmarks
-                    if (filteredBookmarks.length > 0) {
-                        let sortedFilteredBookmarks = [...filteredBookmarks];
-                        
-                        switch (sortType) {
-                            case 'title-asc':
-                                sortedFilteredBookmarks.sort((a, b) => a.title.localeCompare(b.title));
-                                break;
-                            case 'title-desc':
-                                sortedFilteredBookmarks.sort((a, b) => b.title.localeCompare(a.title));
-                                break;
-                            case 'domain-asc':
-                                sortedFilteredBookmarks.sort((a, b) => a.domain.localeCompare(b.domain));
-                                break;
-                            case 'date-newest':
-                                sortedFilteredBookmarks.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
-                                break;
-                            case 'date-oldest':
-                                sortedFilteredBookmarks.sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded));
-                                break;
-                        }
-                        
-                        filteredBookmarks = sortedFilteredBookmarks;
-                    }
-                    
-                    renderBookmarks();
-                    showToast('Bookmarks sorted', 'success');
-                }
-                
-                // Remove duplicate bookmarks
-                function removeDuplicates() {
-                    if (bookmarks.length === 0) {
-                        showToast('No bookmarks to check for duplicates', 'error');
-                        return;
-                    }
-                    
-                    const originalLength = bookmarks.length;
-                    const uniqueUrls = new Set();
-                    const uniqueBookmarks = [];
-                    
-                    bookmarks.forEach(bookmark => {
-                        if (!uniqueUrls.has(bookmark.url)) {
-                            uniqueUrls.add(bookmark.url);
-                            uniqueBookmarks.push(bookmark);
-                        } else {
-                            // If this bookmark was selected, we need to remove it from selected
-                            if (selectedBookmarkIds.has(bookmark.id)) {
-                                selectedBookmarkIds.delete(bookmark.id);
-                            }
-                        }
-                    });
-                    
-                    const removedCount = bookmarks.length - uniqueBookmarks.length;
-                    
-                    if (removedCount > 0) {
-                        bookmarks = uniqueBookmarks;
-                        
-                        // Save the changes
-                        saveBookmarks();
-                        
-                        // Also update filtered bookmarks if necessary
-                        if (filteredBookmarks.length > 0) {
-                            filterBookmarks();
-                        } else {
-                            renderBookmarks();
-                        }
-                        
-                        updateBookmarkCount();
-                        updateSelectedCount();
-                        showToast(`Removed ${removedCount} duplicate bookmark${removedCount !== 1 ? 's' : ''}`, 'success');
-                    } else {
-                        showToast('No duplicates found', 'info');
-                    }
-                }
-                
-                // Toggle bookmark selection
-                function toggleBookmarkSelection(id, isSelected) {
-                    if (isSelected) {
-                        selectedBookmarkIds.add(id);
-                    } else {
-                        selectedBookmarkIds.delete(id);
-                    }
-                    
-                    updateSelectedCount();
-                }
-                
-                // Select all bookmarks
-                function selectAllBookmarks() {
-                    const displayBookmarks = filteredBookmarks.length > 0 ? filteredBookmarks : bookmarks;
-                    
-                    if (displayBookmarks.length === 0) {
-                        showToast('No bookmarks to select', 'error');
-                        return;
-                    }
-                    
-                    displayBookmarks.forEach(bookmark => {
-                        selectedBookmarkIds.add(bookmark.id);
-                    });
-                    
-                    // Update checkboxes in the UI
-                    const checkboxes = bookmarkList.querySelectorAll('input[type="checkbox"]');
-                    checkboxes.forEach(checkbox => {
-                        checkbox.checked = true;
-                    });
-                    
-                    updateSelectedCount();
-                    showToast(`Selected ${displayBookmarks.length} bookmark${displayBookmarks.length !== 1 ? 's' : ''}`, 'success');
-                }
-                
-                // Deselect all bookmarks
-                function deselectAllBookmarks() {
-                    if (selectedBookmarkIds.size === 0) {
-                        showToast('No bookmarks are selected', 'error');
-                        return;
-                    }
-                    
-                    const count = selectedBookmarkIds.size;
-                    selectedBookmarkIds.clear();
-                    
-                    // Update checkboxes in the UI
-                    const checkboxes = bookmarkList.querySelectorAll('input[type="checkbox"]');
-                    checkboxes.forEach(checkbox => {
-                        checkbox.checked = false;
-                    });
-                    
-                    updateSelectedCount();
-                    showToast(`Deselected ${count} bookmark${count !== 1 ? 's' : ''}`, 'success');
-                }
-                
-                // Delete selected bookmarks
-                function deleteSelectedBookmarks() {
-                    if (selectedBookmarkIds.size === 0) {
-                        showToast('No bookmarks selected', 'error');
-                        return;
-                    }
-                    
-                    const count = selectedBookmarkIds.size;
-                    bookmarks = bookmarks.filter(bookmark => !selectedBookmarkIds.has(bookmark.id));
-                    
-                    // Save the changes
-                    saveBookmarks();
-                    
-                    // Also update filtered bookmarks if necessary
-                    if (filteredBookmarks.length > 0) {
-                        filteredBookmarks = filteredBookmarks.filter(bookmark => !selectedBookmarkIds.has(bookmark.id));
-                    }
-                    
-                    selectedBookmarkIds.clear();
-                    
-                    renderBookmarks();
-                    updateBookmarkCount();
-                    updateSelectedCount();
-                    showToast(`Deleted ${count} bookmark${count !== 1 ? 's' : ''}`, 'success');
-                }
-                
-                // Delete a single bookmark
-                function deleteBookmark(id) {
-                    const bookmark = bookmarks.find(bm => bm.id === id);
-                    if (!bookmark) return;
-                    
-                    const confirmDelete = confirm(`Are you sure you want to delete "${bookmark.title}"?`);
-                    if (!confirmDelete) return;
-                    
-                    bookmarks = bookmarks.filter(bookmark => bookmark.id !== id);
-                    
-                    // Save the changes
-                    saveBookmarks();
-                    
-                    // Also update filtered bookmarks if necessary
-                    if (filteredBookmarks.length > 0) {
-                        filteredBookmarks = filteredBookmarks.filter(bookmark => bookmark.id !== id);
-                    }
-                    
-                    // Remove from selected if it was selected
-                    if (selectedBookmarkIds.has(id)) {
-                        selectedBookmarkIds.delete(id);
-                        updateSelectedCount();
-                    }
-                    
-                    renderBookmarks();
-                    updateBookmarkCount();
-                    showToast('Bookmark deleted', 'success');
-                }
-                
-                // Open export modal
-                function openExportModal() {
-                    if (bookmarks.length === 0) {
-                        showToast('No bookmarks to export', 'error');
-                        return;
-                    }
-                    
-                    exportResult.classList.add('hidden');
-                    generateExportBtn.classList.remove('hidden');
-                    copyExportBtn.classList.add('hidden');
-                    exportModal.classList.remove('hidden');
-                }
-                
-                // Close export modal
-                function closeExportModal() {
-                    exportModal.classList.add('hidden');
-                }
-                
-                // Generate export content
-                function generateExport() {
-                    const format = document.getElementById('exportFormat').value;
-                    const scope = document.querySelector('input[name="exportScope"]:checked').value;
-                    
-                    let bookmarksToExport = [];
-                    
-                    if (scope === 'all') {
-                        bookmarksToExport = bookmarks;
-                    } else if (scope === 'selected') {
-                        if (selectedBookmarkIds.size === 0) {
-                            showToast('No bookmarks selected for export', 'error');
-                            return;
-                        }
-                        bookmarksToExport = bookmarks.filter(bookmark => selectedBookmarkIds.has(bookmark.id));
-                    } else if (scope === 'filtered') {
-                        bookmarksToExport = filteredBookmarks.length > 0 ? filteredBookmarks : bookmarks;
-                    }
-                    
-                    if (bookmarksToExport.length === 0) {
-                        exportContent.textContent = 'No bookmarks to export';
-                        exportResult.classList.remove('hidden');
-                        return;
-                    }
-                    
-                    let exportOutput = '';
-                    
-                    if (format === 'html') {
-                        exportOutput = generateHtmlExport(bookmarksToExport);
-                    } else if (format === 'json') {
-                        exportOutput = generateJsonExport(bookmarksToExport);
-                    } else if (format === 'text') {
-                        exportOutput = generateTextExport(bookmarksToExport);
-                    }
-                    
-                    exportContent.textContent = exportOutput;
-                    exportResult.classList.remove('hidden');
-                    generateExportBtn.classList.add('hidden');
-                    copyExportBtn.classList.remove('hidden');
-                    showToast(`${bookmarksToExport.length} bookmarks ready for export`, 'success');
-                }
-                
-                // Generate HTML export
-                function generateHtmlExport(bookmarksToExport) {
-                    let html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
-<!-- This is an automatically generated file.
-     It will be read and overwritten.
-     DO NOT EDIT! -->
-<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
-<TITLE>Bookmarks</TITLE>
-<H1>Bookmarks</H1>
-<DL><p>
-    <DT><H3 ADD_DATE="${Math.floor(Date.now() / 1000)}" LAST_MODIFIED="${Math.floor(Date.now() / 1000)}">Exported Bookmarks</H3>
-    <DL><p>\n`;
-                    
-                    bookmarksToExport.forEach(bookmark => {
-                        const addDate = Math.floor(new Date(bookmark.dateAdded).getTime() / 1000);
-                        html += `        <DT><A HREF="${escapeHtml(bookmark.url)}" ADD_DATE="${addDate}">${escapeHtml(bookmark.title)}</A>\n`;
-                    });
-                    
-                    html += `    </DL><p>
-</DL><p>`;
-                    
-                    return html;
-                }
-                
-                // Generate JSON export
-                function generateJsonExport(bookmarksToExport) {
-                    return JSON.stringify(bookmarksToExport, null, 2);
-                }
-                
-                // Generate text export (URLs only)
-                function generateTextExport(bookmarksToExport) {
-                    return bookmarksToExport.map(bookmark => bookmark.url).join('\n');
-                }
-                
-                // Copy export content to clipboard
-                function copyExportToClipboard() {
-                    const content = exportContent.textContent;
-                    
-                    try {
-                        navigator.clipboard.writeText(content).then(() => {
-                            // Show copied confirmation
-                            copyExportBtn.textContent = 'Copied!';
-                            showToast('Copied to clipboard!', 'success');
-                            setTimeout(() => {
-                                copyExportBtn.textContent = 'Copy to Clipboard';
-                            }, 2000);
-                        }).catch(err => {
-                            console.error('Failed to copy: ', err);
-                            showToast('Failed to copy to clipboard', 'error');
-                            fallbackCopy(content);
-                        });
-                    } catch (err) {
-                        console.error('Failed to copy text: ', err);
-                        showToast('Failed to copy to clipboard', 'error');
-                        fallbackCopy(content);
-                    }
-                }
-                
-                // Fallback copy method for browsers without clipboard API
-                function fallbackCopy(text) {
-                    const textArea = document.createElement('textarea');
-                    textArea.value = text;
-                    textArea.style.position = 'fixed';
-                    textArea.style.left = '-9999px';
-                    document.body.appendChild(textArea);
-                    textArea.focus();
-                    textArea.select();
-                    
-                    try {
-                        const successful = document.execCommand('copy');
-                        if (successful) {
-                            showToast('Copied to clipboard!', 'success');
-                        } else {
-                            showToast('Please copy the text manually', 'error');
-                        }
-                    } catch (err) {
-                        showToast('Please copy the text manually', 'error');
-                    }
-                    
-                    document.body.removeChild(textArea);
-                }
-                
-                // Show toast notification
-                function showToast(message, type = 'info') {
-                    toastMessage.textContent = message;
-                    toast.className = 'toast';
-                    
-                    if (type === 'error') {
-                        toast.classList.add('error');
-                    } else if (type === 'success') {
-                        toast.classList.add('success');
-                    }
-                    
-                    toast.classList.add('show');
-                    
-                    setTimeout(() => {
-                        toast.classList.remove('show');
-                    }, 3000);
-                }
-                
-                // Update bookmark count
-                function updateBookmarkCount() {
-                    if (filteredBookmarks.length > 0) {
-                        bookmarkCount.textContent = `${filteredBookmarks.length} of ${bookmarks.length} bookmarks`;
-                    } else {
-                        bookmarkCount.textContent = `${bookmarks.length} bookmarks`;
-                    }
-                }
-                
-                // Update selected count
-                function updateSelectedCount() {
-                    selectedCount.textContent = `${selectedBookmarkIds.size} selected`;
-                }
-                
-                // Show loading state
-                function showLoading() {
-                    loadingState.classList.remove('hidden');
-                    emptyState.classList.add('hidden');
-                    bookmarkList.classList.add('hidden');
-                }
-                
-                // Hide loading state
-                function hideLoading() {
-                    loadingState.classList.add('hidden');
-                    renderBookmarks();
-                }
-                
-                // Helper functions
-                
-                // Generate a unique ID
-                function generateId() {
-                    return 'bm_' + Math.random().toString(36).substr(2, 9);
-                }
-                
-                // Extract domain from URL
-                function extractDomainFromUrl(url) {
-                    try {
-                        const urlObj = new URL(url);
-                        return urlObj.hostname;
-                    } catch (e) {
-                        return url;
-                    }
-                }
-                
-                // Check if a string is a valid URL
-                function isValidUrl(string) {
-                    try {
-                        new URL(string);
-                        return true;
-                    } catch (e) {
-                        return false;
-                    }
-                }
-                
-                // Escape HTML
-                function escapeHtml(unsafe) {
-                    return unsafe
-                        .replace(/&/g, "&amp;")
-                        .replace(/</g, "&lt;")
-                        .replace(/>/g, "&gt;")
-                        .replace(/"/g, "&quot;")
-                        .replace(/'/g, "&#039;");
-                }
-                
-                // Initialize the app
-                loadBookmarks();
-            });
-        </script>
+/* ── Layout ────────────────────────────────────────────────────────── */
+#app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+/* ── Header ────────────────────────────────────────────────────────── */
+#header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#header h1 {
+  font-size: 12px; font-weight: 600; letter-spacing: .06em;
+  color: var(--accent3); text-transform: uppercase;
+  white-space: nowrap;
+}
+#header-sep { flex: 1; }
+.hbtn {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text1);
+  padding: 2px 8px; border-radius: var(--radius); font-size: 11px;
+  transition: background .12s, color .12s, border-color .12s;
+  white-space: nowrap;
+}
+.hbtn:hover { background: var(--bg4); color: var(--text0); border-color: var(--border2); }
+.hbtn.primary { background: var(--accent2); border-color: var(--accent); color: #fff; }
+.hbtn.primary:hover { background: var(--accent); }
+.hbtn.danger { background: #3a1a1a; border-color: #5a2222; color: var(--red); }
+.hbtn.danger:hover { background: #4a2020; border-color: var(--red); }
+.hbtn.success { background: #1a3a26; border-color: #2a5a3a; color: var(--green); }
+.hbtn.success:hover { background: #1f4a30; }
+
+/* ── Search bar ────────────────────────────────────────────────────── */
+#search-wrap {
+  position: relative; display: flex; align-items: center;
+}
+#searchInput {
+  background: var(--bg2); border: 1px solid var(--border); color: var(--text0);
+  padding: 2px 6px 2px 22px; border-radius: var(--radius);
+  width: 180px; outline: none;
+}
+#searchInput:focus { border-color: var(--accent); }
+#searchInput::placeholder { color: var(--text2); }
+#search-icon {
+  position: absolute; left: 6px; color: var(--text2);
+  pointer-events: none;
+}
+#clear-search {
+  position: absolute; right: 4px; background: none; border: none;
+  color: var(--text2); padding: 0; font-size: 14px; line-height: 1;
+  display: none;
+}
+#clear-search:hover { color: var(--text0); }
+
+/* ── Main body (sidebar + content) ───────────────────────────────── */
+#main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ───────────────────────────────────────────────────────── */
+#sidebar {
+  width: 200px; min-width: 140px; max-width: 320px;
+  background: var(--bg1);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden; flex-shrink: 0;
+  user-select: none;
+}
+#sidebar-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text2);
+}
+#sidebar-tree {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  padding: 2px 0;
+}
+.folder-item {
+  display: flex; align-items: center;
+  padding: 3px 6px; cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background .1s;
+  position: relative;
+}
+.folder-item:hover { background: var(--bg2); }
+.folder-item.active {
+  background: var(--bg3);
+  border-left-color: var(--accent);
+  color: var(--text0);
+}
+.folder-item.drop-target { background: var(--bg3); border-left-color: var(--accent3); }
+.folder-caret {
+  width: 12px; height: 12px; display: inline-flex;
+  align-items: center; justify-content: center;
+  color: var(--text2); flex-shrink: 0; margin-right: 2px;
+  transition: transform .15s;
+}
+.folder-caret.open { transform: rotate(90deg); }
+.folder-icon { font-size: 12px; margin-right: 4px; flex-shrink: 0; }
+.folder-name {
+  flex: 1; font-size: 12px; color: var(--text1); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.folder-item.active .folder-name { color: var(--text0); }
+.folder-count {
+  font-size: 10px; color: var(--text2);
+  background: var(--bg4); border-radius: 8px;
+  padding: 0 4px; min-width: 16px; text-align: center;
+  flex-shrink: 0;
+}
+.folder-actions {
+  display: none; align-items: center; gap: 1px;
+  position: absolute; right: 4px;
+}
+.folder-item:hover .folder-actions { display: flex; }
+.folder-item:hover .folder-count { display: none; }
+.faction-btn {
+  background: none; border: none; color: var(--text2);
+  padding: 1px 2px; border-radius: 2px; font-size: 11px; line-height: 1;
+}
+.faction-btn:hover { color: var(--text0); background: var(--bg4); }
+.faction-btn.del:hover { color: var(--red); }
+
+/* ── Resize handle ─────────────────────────────────────────────────── */
+#resize-handle {
+  width: 4px; cursor: col-resize; background: transparent;
+  flex-shrink: 0; transition: background .1s;
+}
+#resize-handle:hover, #resize-handle.active { background: var(--accent2); }
+
+/* ── Content pane ──────────────────────────────────────────────────── */
+#content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Toolbar ───────────────────────────────────────────────────────── */
+#toolbar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
+  padding: 4px 8px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#toolbar-right { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+#stats-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 2px 8px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px; color: var(--text2);
+  flex-shrink: 0;
+}
+
+/* ── Import bar ────────────────────────────────────────────────────── */
+#import-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
+  padding: 4px 8px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#import-bar.collapsed { display: none; }
+#import-file-zone {
+  display: flex; align-items: center; gap: 4px;
+  border: 1px dashed var(--border2); border-radius: var(--radius);
+  padding: 3px 8px; cursor: pointer;
+  color: var(--text2); font-size: 11px;
+  transition: border-color .15s, color .15s;
+  background: var(--bg3);
+}
+#import-file-zone:hover, #import-file-zone.drag-over {
+  border-color: var(--accent); color: var(--accent3);
+}
+#import-file-zone input[type=file] { display: none; }
+#urlInput {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text0);
+  padding: 2px 6px; border-radius: var(--radius); width: 220px; outline: none;
+  resize: none; height: 26px;
+}
+#urlInput:focus { border-color: var(--accent); }
+#urlInput::placeholder { color: var(--text2); }
+
+/* ── Bookmark list ─────────────────────────────────────────────────── */
+#list-pane {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  background: var(--bg0);
+}
+#bookmarkList { padding: 0; }
+.bm-row {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--border);
+  transition: background .1s;
+  position: relative;
+}
+.bm-row:hover { background: var(--bg2); }
+.bm-row.selected { background: #1a1a2e; }
+.bm-row.drag-over-above::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 2px; background: var(--accent);
+}
+.bm-row.drag-over-below::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+  height: 2px; background: var(--accent);
+}
+.bm-row input[type=checkbox] {
+  width: 12px; height: 12px; flex-shrink: 0;
+  accent-color: var(--accent); cursor: pointer;
+}
+.bm-favicon { width: 14px; height: 14px; flex-shrink: 0; }
+.bm-content { flex: 1; min-width: 0; }
+.bm-title {
+  font-size: 12px; color: var(--accent3); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; display: block;
+}
+.bm-title:hover { text-decoration: underline; }
+.bm-url {
+  font-size: 10px; color: var(--text2); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; display: block;
+}
+.bm-folder-tag {
+  font-size: 10px; color: var(--text2); background: var(--bg3);
+  border: 1px solid var(--border); border-radius: 2px;
+  padding: 0 4px; flex-shrink: 0; white-space: nowrap; max-width: 90px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.bm-date { font-size: 10px; color: var(--text2); flex-shrink: 0; white-space: nowrap; }
+.bm-actions {
+  display: none; align-items: center; gap: 2px; flex-shrink: 0;
+}
+.bm-row:hover .bm-actions { display: flex; }
+.bm-row:hover .bm-date { display: none; }
+.bm-row:hover .bm-folder-tag { display: none; }
+.ba-btn {
+  background: none; border: none; color: var(--text2);
+  padding: 2px 3px; border-radius: 2px; font-size: 13px; line-height: 1;
+}
+.ba-btn:hover { color: var(--text0); background: var(--bg4); }
+.ba-btn.del:hover { color: var(--red); }
+.ba-btn.move:hover { color: var(--accent3); }
+
+/* ── Empty / Loading states ────────────────────────────────────────── */
+#emptyState {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; color: var(--text2); gap: 8px; font-size: 12px;
+}
+#emptyState svg { opacity: .3; }
+#loadingState {
+  display: none; align-items: center; justify-content: center;
+  height: 100%; gap: 8px; color: var(--text2); font-size: 12px;
+}
+.spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--bg4); border-top-color: var(--accent);
+  animation: spin .7s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Sort dropdown ─────────────────────────────────────────────────── */
+.dropdown-wrap { position: relative; }
+.dropdown-menu {
+  display: none; position: absolute; top: 100%; left: 0; margin-top: 2px;
+  background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--radius);
+  z-index: 100; min-width: 150px; overflow: hidden;
+}
+.dropdown-menu.open { display: block; }
+.dropdown-menu button {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  color: var(--text1); padding: 4px 10px; font-size: 11px;
+  transition: background .1s;
+}
+.dropdown-menu button:hover { background: var(--bg3); color: var(--text0); }
+
+/* ── Modals ────────────────────────────────────────────────────────── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.7); z-index: 200;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 6px; padding: 14px;
+  width: 460px; max-width: 95vw;
+  max-height: 90vh; overflow-y: auto;
+}
+.modal h2 { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text0); }
+.modal h3 { font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text1); }
+.form-row { margin-bottom: 8px; }
+.form-row label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text2); margin-bottom: 3px; }
+.form-row input, .form-row select, .form-row textarea {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text0); padding: 4px 6px; border-radius: var(--radius); outline: none;
+}
+.form-row input:focus, .form-row select:focus, .form-row textarea:focus { border-color: var(--accent); }
+.form-row select option { background: var(--bg3); }
+.modal-footer {
+  display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px;
+}
+.radio-group { display: flex; flex-direction: column; gap: 4px; }
+.radio-group label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text1); text-transform: none;
+  letter-spacing: 0; cursor: pointer;
+}
+.radio-group input[type=radio] { accent-color: var(--accent); }
+
+/* ── Export preview ────────────────────────────────────────────────── */
+#exportPreview {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 6px;
+  max-height: 120px; overflow-y: auto; display: none;
+}
+#exportPreview pre { font-size: 10px; color: var(--text1); white-space: pre-wrap; word-break: break-all; }
+
+/* ── Folder tree modal (move bookmark) ─────────────────────────────── */
+#moveFolderTree { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.move-folder-item {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 8px; cursor: pointer; font-size: 12px; color: var(--text1);
+  border-bottom: 1px solid var(--border); transition: background .1s;
+}
+.move-folder-item:last-child { border-bottom: none; }
+.move-folder-item:hover { background: var(--bg3); color: var(--text0); }
+.move-folder-item.selected { background: var(--bg4); color: var(--accent3); }
+
+/* ── Folder rename inline ──────────────────────────────────────────── */
+.folder-name-input {
+  background: var(--bg3); border: 1px solid var(--accent);
+  color: var(--text0); padding: 0 4px; border-radius: 2px;
+  font-size: 12px; outline: none; width: 100%;
+}
+
+/* ── Add bookmark form ─────────────────────────────────────────────── */
+#add-bm-bar {
+  display: none; align-items: center; gap: 4px;
+  padding: 4px 8px; background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#add-bm-bar.open { display: flex; }
+#addTitle, #addUrl {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text0);
+  padding: 2px 6px; border-radius: var(--radius); outline: none; flex: 1;
+}
+#addTitle:focus, #addUrl:focus { border-color: var(--accent); }
+
+/* ── Toast ─────────────────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 12px; right: 12px;
+  background: var(--bg3); border: 1px solid var(--border2);
+  color: var(--text0); padding: 6px 12px; border-radius: var(--radius);
+  font-size: 11px; z-index: 9999;
+  transform: translateY(60px); opacity: 0;
+  transition: transform .2s, opacity .2s;
+  pointer-events: none; max-width: 280px;
+}
+#toast.show { transform: translateY(0); opacity: 1; }
+#toast.success { border-color: var(--green); color: var(--green); }
+#toast.error   { border-color: var(--red);   color: var(--red);   }
+#toast.info    { border-color: var(--accent); color: var(--accent3); }
+
+/* ── Context menu ──────────────────────────────────────────────────── */
+#ctx-menu {
+  display: none; position: fixed; background: var(--bg2);
+  border: 1px solid var(--border2); border-radius: var(--radius);
+  z-index: 300; min-width: 140px; overflow: hidden;
+}
+#ctx-menu.open { display: block; }
+#ctx-menu button {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; background: none; border: none;
+  color: var(--text1); padding: 5px 10px; font-size: 11px;
+  text-align: left; transition: background .1s;
+}
+#ctx-menu button:hover { background: var(--bg3); color: var(--text0); }
+#ctx-menu button.danger:hover { color: var(--red); }
+#ctx-menu hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  #sidebar { width: 150px; }
+  #searchInput { width: 130px; }
+  .bm-date { display: none; }
+  .bm-folder-tag { display: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Header ──────────────────────────────────────────────────────── -->
+  <div id="header">
+    <h1>⬡ Bookmarks</h1>
+    <div id="search-wrap">
+      <svg id="search-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="searchInput" type="text" placeholder="Search… (Ctrl+F)" autocomplete="off" spellcheck="false">
+      <button id="clear-search" title="Clear search">✕</button>
     </div>
+    <div id="header-sep"></div>
+    <button class="hbtn" id="toggleImportBtn" title="Toggle import panel">⬆ Import</button>
+    <button class="hbtn primary" id="addBmBtn" title="Add bookmark (Ctrl+N)">+ Add</button>
+    <button class="hbtn" id="exportBtn" title="Export bookmarks">⬇ Export</button>
+    <button class="hbtn" id="removeDuplicatesBtn" title="Remove duplicates">⊗ Dedupe</button>
+    <div class="dropdown-wrap">
+      <button class="hbtn" id="sortBtn">⇅ Sort</button>
+      <div class="dropdown-menu" id="sortDropdown">
+        <button data-sort="title-asc">Title A→Z</button>
+        <button data-sort="title-desc">Title Z→A</button>
+        <button data-sort="domain-asc">Domain A→Z</button>
+        <button data-sort="date-newest">Newest first</button>
+        <button data-sort="date-oldest">Oldest first</button>
+        <button data-sort="manual">Manual order</button>
+      </div>
+    </div>
+    <div style="width:1px;height:16px;background:var(--border);flex-shrink:0;"></div>
+    <button class="hbtn" id="selectAllBtn">☑ All</button>
+    <button class="hbtn" id="deselectAllBtn">☐ None</button>
+    <button class="hbtn danger" id="deleteSelectedBtn">✕ Del</button>
+  </div>
+
+  <!-- ── Import bar ───────────────────────────────────────────────── -->
+  <div id="import-bar" class="collapsed">
+    <label id="import-file-zone">
+      <input type="file" id="fileInput" accept=".html,.htm,.json,.txt">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span id="fileName">Drop file or click — .html, .json, .txt</span>
+    </label>
+    <input id="urlInput" placeholder="Paste URLs (one per line)…" autocomplete="off" spellcheck="false">
+    <button class="hbtn primary" id="importBtn">Import</button>
+    <button class="hbtn" id="clearInputBtn">Clear</button>
+  </div>
+
+  <!-- ── Add bookmark bar ─────────────────────────────────────────── -->
+  <div id="add-bm-bar">
+    <input id="addTitle" placeholder="Title" autocomplete="off" spellcheck="false">
+    <input id="addUrl"   placeholder="URL (https://…)" autocomplete="off" spellcheck="false">
+    <select id="addFolder" style="background:var(--bg3);border:1px solid var(--border);color:var(--text0);padding:2px 6px;border-radius:var(--radius);outline:none;"></select>
+    <button class="hbtn primary" id="confirmAddBtn">Add</button>
+    <button class="hbtn" id="cancelAddBtn">✕</button>
+  </div>
+
+  <!-- ── Main ─────────────────────────────────────────────────────── -->
+  <div id="main">
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div id="sidebar-header">
+        <span>Folders</span>
+        <button class="faction-btn" id="newFolderBtn" title="New folder">＋</button>
+      </div>
+      <div id="sidebar-tree"></div>
+    </div>
+
+    <div id="resize-handle"></div>
+
+    <!-- Content -->
+    <div id="content">
+      <div id="toolbar">
+        <span id="stats-label" style="font-size:10px;color:var(--text2);"></span>
+        <div id="toolbar-right">
+          <span id="selectedCount" style="font-size:10px;color:var(--text2);">0 selected</span>
+          <button class="hbtn" id="moveSelectedBtn" title="Move selected to folder">⤷ Move</button>
+          <button class="hbtn" id="tagBtn" title="Assign tag/folder to selected">⬡ Tag</button>
+        </div>
+      </div>
+      <div id="list-pane">
+        <div id="emptyState">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          <span>No bookmarks · import a file or add one above</span>
+        </div>
+        <div id="loadingState">
+          <div class="spinner"></div>
+          <span>Processing…</span>
+        </div>
+        <div id="bookmarkList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Export Modal ──────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="exportModal">
+  <div class="modal">
+    <h2>Export Bookmarks</h2>
+    <div class="form-row">
+      <label>Format</label>
+      <select id="exportFormat">
+        <option value="html-flat">HTML — Browser Import (flat)</option>
+        <option value="html-folders">HTML — Browser Import (with folders)</option>
+        <option value="json">JSON (full data)</option>
+        <option value="text">Plain text (URLs only)</option>
+        <option value="csv">CSV (title, url, folder, date)</option>
+        <option value="markdown">Markdown list</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>Scope</label>
+      <div class="radio-group">
+        <label><input type="radio" name="exportScope" value="all" checked> All bookmarks</label>
+        <label><input type="radio" name="exportScope" value="selected"> Selected only</label>
+        <label><input type="radio" name="exportScope" value="filtered"> Current view / search results</label>
+        <label><input type="radio" name="exportScope" value="folder"> Active folder</label>
+      </div>
+    </div>
+    <div id="exportPreview"><pre id="exportContent"></pre></div>
+    <div class="modal-footer">
+      <button class="hbtn" id="cancelExportBtn">Cancel</button>
+      <button class="hbtn primary" id="generateExportBtn">Generate</button>
+      <button class="hbtn" id="copyExportBtn" style="display:none;">Copy</button>
+      <button class="hbtn success" id="downloadExportBtn" style="display:none;">⬇ Download</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit Bookmark Modal ───────────────────────────────────────────── -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h2>Edit Bookmark</h2>
+    <div class="form-row">
+      <label>Title</label>
+      <input type="text" id="editTitle" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>URL</label>
+      <input type="text" id="editUrl" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="form-row">
+      <label>Folder</label>
+      <select id="editFolder"></select>
+    </div>
+    <div class="form-row">
+      <label>Notes (optional)</label>
+      <textarea id="editNotes" rows="2" style="resize:vertical;"></textarea>
+    </div>
+    <input type="hidden" id="editBookmarkId">
+    <div class="modal-footer">
+      <button class="hbtn" id="cancelEditBtn">Cancel</button>
+      <button class="hbtn primary" id="saveEditBtn">Save (Ctrl+S)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── New/Rename Folder Modal ───────────────────────────────────────── -->
+<div class="modal-overlay" id="folderModal">
+  <div class="modal" style="width:320px;">
+    <h2 id="folderModalTitle">New Folder</h2>
+    <div class="form-row">
+      <label>Name</label>
+      <input type="text" id="folderNameInput" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Parent folder</label>
+      <select id="folderParentSelect"></select>
+    </div>
+    <input type="hidden" id="folderEditId">
+    <div class="modal-footer">
+      <button class="hbtn" id="cancelFolderBtn">Cancel</button>
+      <button class="hbtn primary" id="saveFolderBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Move Bookmarks Modal ──────────────────────────────────────────── -->
+<div class="modal-overlay" id="moveModal">
+  <div class="modal" style="width:300px;">
+    <h2>Move to Folder</h2>
+    <p style="font-size:11px;color:var(--text2);margin-bottom:8px;">Select destination folder:</p>
+    <div id="moveFolderTree"></div>
+    <div class="modal-footer">
+      <button class="hbtn" id="cancelMoveBtn">Cancel</button>
+      <button class="hbtn primary" id="confirmMoveBtn">Move</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Context Menu ──────────────────────────────────────────────────── -->
+<div id="ctx-menu">
+  <button id="ctx-open">↗ Open in new tab</button>
+  <button id="ctx-copy-url">⎘ Copy URL</button>
+  <button id="ctx-copy-title">⎘ Copy title</button>
+  <hr>
+  <button id="ctx-edit">✎ Edit</button>
+  <button id="ctx-move">⤷ Move to folder</button>
+  <hr>
+  <button id="ctx-delete" class="danger">✕ Delete</button>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// CONSTANTS & STATE
+// ══════════════════════════════════════════════════════════════════════
+const BM_KEY     = 'bmgr_bookmarks_v2';
+const FOLDER_KEY = 'bmgr_folders_v2';
+const ROOT_ID    = 'root';
+
+let bookmarks        = [];   // {id, title, url, domain, folderId, dateAdded, notes, order}
+let folders          = [];   // {id, name, parentId, order}
+let filteredBookmarks = null; // null = no filter active
+let selectedIds       = new Set();
+let activeFolderId    = null; // null = All
+let sortMode          = 'manual';
+let toastTimer        = null;
+let ctxTargetId       = null;
+let moveTargetIds     = null; // Set of ids to move
+let dragId            = null; // bookmark being dragged
+
+// ══════════════════════════════════════════════════════════════════════
+// PERSISTENCE
+// ══════════════════════════════════════════════════════════════════════
+function loadData() {
+  try {
+    const bm = localStorage.getItem(BM_KEY);
+    const fl = localStorage.getItem(FOLDER_KEY);
+    if (bm) bookmarks = JSON.parse(bm);
+    if (fl) folders   = JSON.parse(fl);
+    // migrate old format: ensure folderId field
+    bookmarks = bookmarks.map(b => ({
+      folderId: null, notes: '', order: 0, ...b
+    }));
+  } catch(e) {
+    console.error('Load error', e);
+    toast('Failed to load data from storage', 'error');
+  }
+}
+
+function save() {
+  try {
+    localStorage.setItem(BM_KEY,     JSON.stringify(bookmarks));
+    localStorage.setItem(FOLDER_KEY, JSON.stringify(folders));
+  } catch(e) {
+    console.error('Save error', e);
+    toast('Save failed — storage may be full', 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// UTILITIES
+// ══════════════════════════════════════════════════════════════════════
+function genId() { return '_' + Math.random().toString(36).slice(2, 10); }
+
+function extractDomain(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+}
+
+function normalizeUrl(url) {
+  url = url.trim();
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return 'https://' + url;
+}
+
+function isValidUrl(str) {
+  try { return Boolean(new URL(str)); } catch { return false; }
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escCsv(str) {
+  str = String(str).replace(/"/g, '""');
+  return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
+}
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString(undefined, { year:'2-digit', month:'2-digit', day:'2-digit' });
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FOLDER HELPERS
+// ══════════════════════════════════════════════════════════════════════
+function getFolderById(id) {
+  if (!id || id === ROOT_ID) return null;
+  return folders.find(f => f.id === id) || null;
+}
+
+function getFolderName(id) {
+  if (!id) return 'Uncategorized';
+  const f = getFolderById(id);
+  return f ? f.name : 'Unknown';
+}
+
+function getFolderPath(id) {
+  const parts = [];
+  let cur = id;
+  while (cur && cur !== ROOT_ID) {
+    const f = getFolderById(cur);
+    if (!f) break;
+    parts.unshift(f.name);
+    cur = f.parentId;
+  }
+  return parts.join(' / ') || 'Uncategorized';
+}
+
+function getChildFolders(parentId) {
+  return folders.filter(f => (f.parentId || null) === (parentId || null))
+    .sort((a,b) => (a.order||0)-(b.order||0) || a.name.localeCompare(b.name));
+}
+
+function countInFolder(fid) {
+  return bookmarks.filter(b => (b.folderId||null) === fid).length;
+}
+
+function countInFolderDeep(fid) {
+  let n = countInFolder(fid);
+  getChildFolders(fid).forEach(c => { n += countInFolderDeep(c.id); });
+  return n;
+}
+
+function buildFolderOptions(selectedId, excludeId) {
+  const opts = [{ id: null, label: '— Uncategorized —', depth: 0 }];
+  function walk(parentId, depth) {
+    getChildFolders(parentId).forEach(f => {
+      if (f.id === excludeId) return;
+      opts.push({ id: f.id, label: f.name, depth });
+      walk(f.id, depth + 1);
+    });
+  }
+  walk(null, 0);
+  return opts.map(o => {
+    const prefix = '  '.repeat(o.depth);
+    return `<option value="${o.id||''}" ${(o.id||'')===(selectedId||'')?'selected':''}>${prefix}${escHtml(o.label)}</option>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// RENDER — SIDEBAR
+// ══════════════════════════════════════════════════════════════════════
+let openFolders = new Set(); // expanded folder ids
+
+function renderSidebar() {
+  const tree = document.getElementById('sidebar-tree');
+  tree.innerHTML = '';
+
+  // "All" row
+  const allRow = mkFolderRow(null, '⬡ All bookmarks', bookmarks.length, null);
+  tree.appendChild(allRow);
+
+  function renderLevel(parentId, indent) {
+    getChildFolders(parentId).forEach(f => {
+      const cnt   = countInFolderDeep(f.id);
+      const isOpen = openFolders.has(f.id);
+      const hasChildren = getChildFolders(f.id).length > 0;
+      const row = mkFolderRow(f.id, f.name, cnt, f.id, hasChildren, isOpen, indent);
+      tree.appendChild(row);
+      if (isOpen) renderLevel(f.id, indent + 1);
+    });
+  }
+  renderLevel(null, 0);
+}
+
+function mkFolderRow(fid, name, count, folderObj, hasChildren, isOpen, indent=0) {
+  const div = document.createElement('div');
+  div.className = 'folder-item' + ((fid === activeFolderId) ? ' active' : '');
+  div.dataset.fid = fid || '';
+  div.style.paddingLeft = (6 + indent * 12) + 'px';
+
+  // drag-over target for moving bookmarks
+  div.addEventListener('dragover', e => { e.preventDefault(); div.classList.add('drop-target'); });
+  div.addEventListener('dragleave', () => div.classList.remove('drop-target'));
+  div.addEventListener('drop', e => {
+    e.preventDefault(); div.classList.remove('drop-target');
+    if (dragId) { moveBookmarksToFolder([dragId], fid); dragId = null; }
+  });
+
+  // caret
+  const caret = document.createElement('span');
+  caret.className = 'folder-caret' + (isOpen ? ' open' : '');
+  if (hasChildren) {
+    caret.innerHTML = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`;
+    caret.addEventListener('click', e => {
+      e.stopPropagation();
+      if (openFolders.has(fid)) openFolders.delete(fid); else openFolders.add(fid);
+      renderSidebar();
+    });
+  }
+  div.appendChild(caret);
+
+  const icon = document.createElement('span');
+  icon.className = 'folder-icon';
+  icon.textContent = fid === null ? '' : (isOpen ? '📂' : '📁');
+  div.appendChild(icon);
+
+  const nameEl = document.createElement('span');
+  nameEl.className = 'folder-name';
+  nameEl.textContent = name;
+  div.appendChild(nameEl);
+
+  const countEl = document.createElement('span');
+  countEl.className = 'folder-count';
+  countEl.textContent = count;
+  div.appendChild(countEl);
+
+  // action buttons (only for real folders)
+  if (fid !== null) {
+    const acts = document.createElement('div');
+    acts.className = 'folder-actions';
+
+    const renBtn = document.createElement('button');
+    renBtn.className = 'faction-btn'; renBtn.title = 'Rename'; renBtn.textContent = '✎';
+    renBtn.addEventListener('click', e => { e.stopPropagation(); openFolderModal('rename', fid); });
+
+    const moveBtn = document.createElement('button');
+    moveBtn.className = 'faction-btn'; moveBtn.title = 'Move folder'; moveBtn.textContent = '⤷';
+    moveBtn.addEventListener('click', e => { e.stopPropagation(); openFolderModal('move', fid); });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'faction-btn del'; delBtn.title = 'Delete folder'; delBtn.textContent = '✕';
+    delBtn.addEventListener('click', e => { e.stopPropagation(); deleteFolder(fid); });
+
+    acts.appendChild(renBtn); acts.appendChild(moveBtn); acts.appendChild(delBtn);
+    div.appendChild(acts);
+  }
+
+  div.addEventListener('click', () => {
+    activeFolderId = fid;
+    renderSidebar();
+    applyFilterAndRender();
+  });
+
+  return div;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// RENDER — BOOKMARK LIST
+// ══════════════════════════════════════════════════════════════════════
+function getDisplayList() {
+  if (filteredBookmarks !== null) return filteredBookmarks;
+  if (activeFolderId !== null) {
+    return bookmarks.filter(b => (b.folderId||null) === activeFolderId);
+  }
+  return bookmarks;
+}
+
+function applyFilterAndRender() {
+  const term = document.getElementById('searchInput').value.toLowerCase().trim();
+  if (term) {
+    const base = activeFolderId !== null
+      ? bookmarks.filter(b => (b.folderId||null) === activeFolderId)
+      : bookmarks;
+    filteredBookmarks = base.filter(b =>
+      b.title.toLowerCase().includes(term) ||
+      b.url.toLowerCase().includes(term) ||
+      b.domain.toLowerCase().includes(term) ||
+      (b.notes||'').toLowerCase().includes(term)
+    );
+  } else {
+    filteredBookmarks = null;
+  }
+  renderBookmarks();
+  updateStats();
+}
+
+function renderBookmarks() {
+  const list = document.getElementById('bookmarkList');
+  const emptyState = document.getElementById('emptyState');
+  const loadingState = document.getElementById('loadingState');
+  loadingState.style.display = 'none';
+
+  const display = getDisplayList();
+  const sorted  = sortedDisplay(display);
+
+  if (bookmarks.length === 0) {
+    emptyState.style.display = 'flex'; list.innerHTML = ''; return;
+  }
+  emptyState.style.display = 'none';
+
+  if (sorted.length === 0) {
+    list.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text2);font-size:11px;">${
+      filteredBookmarks !== null ? 'No bookmarks match your search.' : 'This folder is empty.'
+    }</div>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  sorted.forEach(bm => frag.appendChild(createBmRow(bm)));
+  list.innerHTML = '';
+  list.appendChild(frag);
+}
+
+function sortedDisplay(list) {
+  const arr = [...list];
+  switch (sortMode) {
+    case 'title-asc':   return arr.sort((a,b) => a.title.localeCompare(b.title));
+    case 'title-desc':  return arr.sort((a,b) => b.title.localeCompare(a.title));
+    case 'domain-asc':  return arr.sort((a,b) => a.domain.localeCompare(b.domain));
+    case 'date-newest': return arr.sort((a,b) => new Date(b.dateAdded)-new Date(a.dateAdded));
+    case 'date-oldest': return arr.sort((a,b) => new Date(a.dateAdded)-new Date(b.dateAdded));
+    default: return arr.sort((a,b) => (a.order||0)-(b.order||0));
+  }
+}
+
+function createBmRow(bm) {
+  const row = document.createElement('div');
+  row.className = 'bm-row' + (selectedIds.has(bm.id) ? ' selected' : '');
+  row.dataset.id = bm.id;
+  row.draggable = true;
+
+  // Checkbox
+  const cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.checked = selectedIds.has(bm.id);
+  cb.setAttribute('aria-label', `Select "${bm.title}"`);
+  cb.addEventListener('change', () => {
+    selectedIds[cb.checked ? 'add' : 'delete'](bm.id);
+    row.classList.toggle('selected', cb.checked);
+    updateStats();
+  });
+  row.appendChild(cb);
+
+  // Favicon
+  const fav = document.createElement('img');
+  fav.className = 'bm-favicon'; fav.alt = '';
+  fav.src = `https://www.google.com/s2/favicons?domain=${bm.domain}&sz=16`;
+  fav.onerror = () => {
+    fav.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3C/svg%3E";
+    fav.onerror = null;
+  };
+  row.appendChild(fav);
+
+  // Content
+  const content = document.createElement('div');
+  content.className = 'bm-content';
+
+  const titleA = document.createElement('a');
+  titleA.className = 'bm-title';
+  titleA.href = bm.url; titleA.target = '_blank'; titleA.rel = 'noopener noreferrer';
+  titleA.textContent = bm.title || bm.domain;
+  content.appendChild(titleA);
+
+  const urlDiv = document.createElement('div');
+  urlDiv.className = 'bm-url'; urlDiv.textContent = bm.url;
+  content.appendChild(urlDiv);
+  row.appendChild(content);
+
+  // Folder tag
+  if (bm.folderId) {
+    const tag = document.createElement('span');
+    tag.className = 'bm-folder-tag';
+    tag.textContent = getFolderName(bm.folderId);
+    tag.title = getFolderPath(bm.folderId);
+    row.appendChild(tag);
+  }
+
+  // Date
+  const dateEl = document.createElement('span');
+  dateEl.className = 'bm-date'; dateEl.textContent = fmtDate(bm.dateAdded);
+  row.appendChild(dateEl);
+
+  // Actions
+  const acts = document.createElement('div');
+  acts.className = 'bm-actions';
+
+  const mkBtn = (txt, cls, title, fn) => {
+    const b = document.createElement('button');
+    b.className = 'ba-btn' + (cls ? ' '+cls : '');
+    b.title = title; b.textContent = txt;
+    b.addEventListener('click', e => { e.stopPropagation(); fn(); });
+    return b;
+  };
+  acts.appendChild(mkBtn('✎', '', 'Edit', () => openEditModal(bm)));
+  acts.appendChild(mkBtn('⤷', 'move', 'Move to folder', () => openMoveModal(new Set([bm.id]))));
+  acts.appendChild(mkBtn('⎘', '', 'Copy URL', () => copyText(bm.url)));
+  acts.appendChild(mkBtn('✕', 'del', 'Delete', () => deleteSingle(bm.id)));
+  row.appendChild(acts);
+
+  // Drag
+  row.addEventListener('dragstart', e => {
+    dragId = bm.id;
+    e.dataTransfer.effectAllowed = 'move';
+    row.style.opacity = '.5';
+  });
+  row.addEventListener('dragend', () => { dragId = null; row.style.opacity = ''; });
+
+  // Drag reorder within list
+  row.addEventListener('dragover', e => {
+    if (!dragId || dragId === bm.id) return;
+    e.preventDefault();
+    const rect = row.getBoundingClientRect();
+    const half = e.clientY < rect.top + rect.height / 2;
+    row.classList.toggle('drag-over-above', half);
+    row.classList.toggle('drag-over-below', !half);
+  });
+  row.addEventListener('dragleave', () => {
+    row.classList.remove('drag-over-above','drag-over-below');
+  });
+  row.addEventListener('drop', e => {
+    e.preventDefault();
+    if (!dragId || dragId === bm.id) return;
+    row.classList.remove('drag-over-above','drag-over-below');
+    const rect = row.getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    reorderBookmark(dragId, bm.id, before);
+    dragId = null;
+  });
+
+  // Context menu
+  row.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    ctxTargetId = bm.id;
+    showCtxMenu(e.clientX, e.clientY);
+  });
+
+  return row;
+}
+
+function updateStats() {
+  const display = getDisplayList();
+  const total   = bookmarks.length;
+  const showing = display.length;
+  const selN    = selectedIds.size;
+  document.getElementById('stats-label').textContent =
+    filteredBookmarks !== null
+      ? `${showing} of ${total} bookmarks`
+      : activeFolderId !== null
+        ? `${showing} in folder · ${total} total`
+        : `${total} bookmark${total!==1?'s':''}`;
+  document.getElementById('selectedCount').textContent = selN > 0 ? `${selN} selected` : '';
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// IMPORT
+// ══════════════════════════════════════════════════════════════════════
+function importFromFile(file) {
+  const name = file.name.toLowerCase();
+  if (!name.match(/\.(html?|json|txt)$/)) {
+    toast('Unsupported format — use .html, .json, or .txt', 'error'); return;
+  }
+  document.getElementById('loadingState').style.display = 'flex';
+  document.getElementById('bookmarkList').innerHTML = '';
+  document.getElementById('emptyState').style.display = 'none';
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    let imported = [];
+    try {
+      if (name.match(/\.html?$/))       imported = parseHtml(e.target.result);
+      else if (name.endsWith('.json'))  imported = parseJson(JSON.parse(e.target.result));
+      else                              imported = parseTxt(e.target.result);
+    } catch(err) {
+      console.error(err);
+      toast('Parse error: ' + err.message, 'error');
+    }
+    addBookmarks(imported);
+    document.getElementById('loadingState').style.display = 'none';
+  };
+  reader.onerror = () => { toast('Failed to read file', 'error'); document.getElementById('loadingState').style.display = 'none'; };
+  reader.readAsText(file);
+}
+
+function importFromText(text) {
+  const imported = parseTxt(text);
+  addBookmarks(imported);
+  document.getElementById('urlInput').value = '';
+}
+
+// ── Parsers ────────────────────────────────────────────────────────
+function parseHtml(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const result = [];
+
+  // Try to preserve folder structure from Netscape format
+  function walkDl(dl, folderId) {
+    if (!dl) return;
+    let curFolder = folderId;
+    [...dl.children].forEach(child => {
+      const tag = child.tagName.toUpperCase();
+      if (tag === 'DT') {
+        const h3 = child.querySelector(':scope > H3');
+        const a  = child.querySelector(':scope > A');
+        const dl2 = child.querySelector(':scope > DL');
+        if (h3) {
+          const fname = h3.textContent.trim();
+          if (fname && fname !== 'Bookmarks bar' && fname !== 'Bookmarks') {
+            let f = folders.find(f => f.name === fname && (f.parentId||null) === (folderId||null));
+            if (!f) { f = { id: genId(), name: fname, parentId: folderId||null, order: folders.length }; folders.push(f); }
+            curFolder = f.id;
+          }
+          if (dl2) walkDl(dl2, curFolder);
+        } else if (a) {
+          const rawUrl  = a.getAttribute('href') || '';
+          const url     = normalizeUrl(rawUrl);
+          if (!isValidUrl(url)) return;
+          const addAttr = a.getAttribute('add_date');
+          const dateAdded = addAttr
+            ? new Date(parseInt(addAttr,10)*1000).toISOString()
+            : new Date().toISOString();
+          result.push({
+            id: genId(), title: a.textContent.trim() || extractDomain(url),
+            url, domain: extractDomain(url), folderId: curFolder||null,
+            dateAdded, notes: '', order: result.length
+          });
+          if (dl2) walkDl(dl2, curFolder);
+        }
+      } else if (tag === 'DL') {
+        walkDl(child, curFolder);
+      }
+    });
+  }
+
+  const topDl = doc.querySelector('DL');
+  if (topDl) {
+    walkDl(topDl, null);
+  } else {
+    // fallback: grab all <a>
+    doc.querySelectorAll('a').forEach(a => {
+      const rawUrl = a.getAttribute('href') || '';
+      const url = normalizeUrl(rawUrl);
+      if (!isValidUrl(url)) return;
+      const addAttr = a.getAttribute('add_date');
+      const dateAdded = addAttr ? new Date(parseInt(addAttr,10)*1000).toISOString() : new Date().toISOString();
+      result.push({ id: genId(), title: a.textContent.trim() || extractDomain(url), url, domain: extractDomain(url), folderId: null, dateAdded, notes: '', order: result.length });
+    });
+  }
+  return result;
+}
+
+function parseJson(json) {
+  const result = [];
+  function norm(url) { return normalizeUrl(String(url||'')); }
+
+  if (Array.isArray(json)) {
+    json.forEach(item => {
+      const url = norm(typeof item === 'string' ? item : (item.url||item.href||item.link||''));
+      if (!isValidUrl(url)) return;
+      const title = (item.title||item.name||item.label||extractDomain(url)||'').toString().trim();
+      result.push({ id:genId(), title:title||extractDomain(url), url, domain:extractDomain(url), folderId:null, dateAdded:new Date().toISOString(), notes:'', order:result.length });
+    });
+  } else if (json && json.roots) {
+    // Chrome JSON export
+    function walkChrome(node, folderId) {
+      if (!node || !Array.isArray(node.children)) return;
+      node.children.forEach(child => {
+        if (child.type === 'url') {
+          const url = norm(child.url||'');
+          if (!isValidUrl(url)) return;
+          let dateAdded = new Date().toISOString();
+          if (child.date_added) {
+            const ms = Math.round(parseInt(child.date_added,10)/1000) - 11644473600000;
+            if (!isNaN(ms) && ms > 0) dateAdded = new Date(ms).toISOString();
+          }
+          result.push({ id:genId(), title:child.name||extractDomain(url), url, domain:extractDomain(url), folderId, dateAdded, notes:'', order:result.length });
+        } else if (child.type === 'folder') {
+          let f = folders.find(f => f.name === child.name && (f.parentId||null) === (folderId||null));
+          if (!f) { f = { id:genId(), name:child.name, parentId:folderId||null, order:folders.length }; folders.push(f); }
+          walkChrome(child, f.id);
+        }
+      });
+    }
+    Object.values(json.roots).forEach(r => walkChrome(r, null));
+  }
+  return result;
+}
+
+function parseTxt(text) {
+  return text.split('\n').map(l => l.trim()).filter(l => {
+    const u = normalizeUrl(l); return l && isValidUrl(u);
+  }).map((raw,i) => {
+    const url = normalizeUrl(raw);
+    return { id:genId(), title:extractDomain(url), url, domain:extractDomain(url), folderId:null, dateAdded:new Date().toISOString(), notes:'', order:bookmarks.length+i };
+  });
+}
+
+function addBookmarks(newBms) {
+  if (!newBms.length) { toast('No valid bookmarks found', 'error'); return; }
+  const existUrls = new Set(bookmarks.map(b => b.url.toLowerCase().replace(/\/+$/,'')));
+  const unique = newBms.filter(b => {
+    const key = b.url.toLowerCase().replace(/^http:\/\//i,'https://').replace(/\/+$/,'');
+    return !existUrls.has(key);
+  });
+  const skipped = newBms.length - unique.length;
+  if (!unique.length) { toast('All bookmarks already exist', 'error'); return; }
+  bookmarks = [...bookmarks, ...unique];
+  save();
+  renderSidebar();
+  applyFilterAndRender();
+  toast(`Imported ${unique.length}${skipped?' ('+skipped+' dupes skipped)':''}`, 'success');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ADD BOOKMARK
+// ══════════════════════════════════════════════════════════════════════
+function openAddBar() {
+  const bar = document.getElementById('add-bm-bar');
+  bar.classList.toggle('open');
+  if (bar.classList.contains('open')) {
+    document.getElementById('addFolder').innerHTML = buildFolderOptions(activeFolderId);
+    document.getElementById('addTitle').focus();
+  }
+}
+
+function confirmAdd() {
+  const title = document.getElementById('addTitle').value.trim();
+  let   url   = document.getElementById('addUrl').value.trim();
+  const fid   = document.getElementById('addFolder').value || null;
+  if (!url) { toast('URL is required', 'error'); return; }
+  url = normalizeUrl(url);
+  if (!isValidUrl(url)) { toast('Invalid URL', 'error'); return; }
+  const bm = {
+    id: genId(), title: title || extractDomain(url), url,
+    domain: extractDomain(url), folderId: fid || null,
+    dateAdded: new Date().toISOString(), notes: '', order: bookmarks.length
+  };
+  bookmarks.push(bm);
+  save();
+  document.getElementById('addTitle').value = '';
+  document.getElementById('addUrl').value   = '';
+  renderSidebar(); applyFilterAndRender();
+  toast('Bookmark added', 'success');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// EDIT MODAL
+// ══════════════════════════════════════════════════════════════════════
+function openEditModal(bm) {
+  document.getElementById('editTitle').value       = bm.title;
+  document.getElementById('editUrl').value         = bm.url;
+  document.getElementById('editNotes').value       = bm.notes || '';
+  document.getElementById('editBookmarkId').value  = bm.id;
+  document.getElementById('editFolder').innerHTML  = buildFolderOptions(bm.folderId);
+  openModal('editModal');
+  document.getElementById('editTitle').focus();
+}
+
+function saveEdit() {
+  const id    = document.getElementById('editBookmarkId').value;
+  const title = document.getElementById('editTitle').value.trim();
+  let   url   = document.getElementById('editUrl').value.trim();
+  const notes = document.getElementById('editNotes').value.trim();
+  const fid   = document.getElementById('editFolder').value || null;
+
+  if (!title) { toast('Title required', 'error'); return; }
+  url = normalizeUrl(url);
+  if (!isValidUrl(url)) { toast('Invalid URL', 'error'); return; }
+
+  const idx = bookmarks.findIndex(b => b.id === id);
+  if (idx === -1) return;
+  bookmarks[idx] = { ...bookmarks[idx], title, url, domain: extractDomain(url), notes, folderId: fid };
+  save();
+  closeModal('editModal');
+  renderSidebar(); applyFilterAndRender();
+  toast('Saved', 'success');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FOLDER CRUD
+// ══════════════════════════════════════════════════════════════════════
+function openFolderModal(mode, fid) {
+  const modal = document.getElementById('folderModal');
+  const title = document.getElementById('folderModalTitle');
+  const nameI = document.getElementById('folderNameInput');
+  const editI = document.getElementById('folderEditId');
+  const parSel = document.getElementById('folderParentSelect');
+
+  if (mode === 'new') {
+    title.textContent = 'New Folder';
+    nameI.value = '';
+    editI.value = '';
+    parSel.innerHTML = buildFolderOptions(null);
+  } else if (mode === 'rename') {
+    const f = getFolderById(fid);
+    title.textContent = 'Rename / Move Folder';
+    nameI.value = f ? f.name : '';
+    editI.value = fid;
+    parSel.innerHTML = buildFolderOptions(f ? f.parentId : null, fid);
+  } else if (mode === 'move') {
+    const f = getFolderById(fid);
+    title.textContent = 'Move Folder';
+    nameI.value = f ? f.name : '';
+    editI.value = fid;
+    parSel.innerHTML = buildFolderOptions(f ? f.parentId : null, fid);
+  }
+  openModal('folderModal');
+  nameI.focus();
+}
+
+function saveFolder() {
+  const name   = document.getElementById('folderNameInput').value.trim();
+  const editId = document.getElementById('folderEditId').value;
+  const parId  = document.getElementById('folderParentSelect').value || null;
+
+  if (!name) { toast('Folder name required', 'error'); return; }
+
+  if (!editId) {
+    // New
+    folders.push({ id: genId(), name, parentId: parId, order: folders.length });
+    toast('Folder created', 'success');
+  } else {
+    // Edit
+    const idx = folders.findIndex(f => f.id === editId);
+    if (idx !== -1) { folders[idx].name = name; folders[idx].parentId = parId; }
+    toast('Folder updated', 'success');
+  }
+  save();
+  closeModal('folderModal');
+  renderSidebar();
+  // update folder selects in any open modals
+  populateFolderSelects();
+}
+
+function deleteFolder(fid) {
+  const f   = getFolderById(fid);
+  const cnt = countInFolderDeep(fid);
+  const msg = cnt > 0
+    ? `Delete folder "${f.name}" and move its ${cnt} bookmark(s) to Uncategorized?`
+    : `Delete empty folder "${f.name}"?`;
+  if (!confirm(msg)) return;
+
+  // Move all bookmarks in this folder (and sub-folders) to null
+  function collectFolderIds(fid2) {
+    const ids = [fid2];
+    getChildFolders(fid2).forEach(c => ids.push(...collectFolderIds(c.id)));
+    return ids;
+  }
+  const toRemove = new Set(collectFolderIds(fid));
+  bookmarks = bookmarks.map(b => toRemove.has(b.folderId) ? {...b, folderId:null} : b);
+  folders   = folders.filter(f => !toRemove.has(f.id));
+
+  if (activeFolderId && toRemove.has(activeFolderId)) activeFolderId = null;
+  save();
+  renderSidebar(); applyFilterAndRender();
+  toast('Folder deleted', 'success');
+}
+
+function moveBookmarksToFolder(ids, fid) {
+  let changed = 0;
+  bookmarks = bookmarks.map(b => {
+    if (ids.includes(b.id)) { changed++; return {...b, folderId: fid||null}; }
+    return b;
+  });
+  save();
+  renderSidebar(); applyFilterAndRender();
+  toast(`Moved ${changed} bookmark${changed!==1?'s':''} to ${fid?getFolderName(fid):'Uncategorized'}`, 'success');
+}
+
+function openMoveModal(idSet) {
+  moveTargetIds = idSet;
+  const tree = document.getElementById('moveFolderTree');
+  tree.innerHTML = '';
+
+  // "Uncategorized" option
+  const uncat = mkMoveFolderItem(null, '— Uncategorized —', 0);
+  tree.appendChild(uncat);
+
+  function walkMove(parentId, depth) {
+    getChildFolders(parentId).forEach(f => {
+      tree.appendChild(mkMoveFolderItem(f.id, f.name, depth));
+      walkMove(f.id, depth+1);
+    });
+  }
+  walkMove(null, 0);
+  openModal('moveModal');
+}
+
+let selectedMoveTarget = null;
+function mkMoveFolderItem(fid, name, depth) {
+  const div = document.createElement('div');
+  div.className = 'move-folder-item';
+  div.style.paddingLeft = (8 + depth*14)+'px';
+  div.textContent = (fid?'📁 ':'') + name;
+  div.dataset.fid = fid||'';
+  div.addEventListener('click', () => {
+    document.querySelectorAll('.move-folder-item').forEach(d => d.classList.remove('selected'));
+    div.classList.add('selected');
+    selectedMoveTarget = fid;
+  });
+  return div;
+}
+
+function confirmMove() {
+  if (!moveTargetIds) return;
+  moveBookmarksToFolder([...moveTargetIds], selectedMoveTarget);
+  selectedMoveTarget = null; moveTargetIds = null;
+  closeModal('moveModal');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// DUPLICATE REMOVAL
+// ══════════════════════════════════════════════════════════════════════
+function removeDuplicates() {
+  const seen   = new Set();
+  const unique = [];
+  bookmarks.forEach(bm => {
+    const key = bm.url.replace(/^http:\/\//i,'https://').toLowerCase().replace(/\/+$/,'');
+    if (!seen.has(key)) { seen.add(key); unique.push(bm); }
+    else selectedIds.delete(bm.id);
+  });
+  const removed = bookmarks.length - unique.length;
+  if (!removed) { toast('No duplicates found', 'info'); return; }
+  bookmarks = unique;
+  save(); renderSidebar(); applyFilterAndRender();
+  toast(`Removed ${removed} duplicate${removed!==1?'s':''}`, 'success');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SELECTION
+// ══════════════════════════════════════════════════════════════════════
+function selectAll() {
+  getDisplayList().forEach(b => selectedIds.add(b.id));
+  document.querySelectorAll('.bm-row').forEach(r => {
+    r.classList.add('selected');
+    r.querySelector('input[type=checkbox]').checked = true;
+  });
+  updateStats();
+}
+
+function deselectAll() {
+  selectedIds.clear();
+  document.querySelectorAll('.bm-row').forEach(r => {
+    r.classList.remove('selected');
+    r.querySelector('input[type=checkbox]').checked = false;
+  });
+  updateStats();
+}
+
+function deleteSelected() {
+  if (!selectedIds.size) { toast('Nothing selected', 'error'); return; }
+  if (!confirm(`Delete ${selectedIds.size} bookmark${selectedIds.size!==1?'s':''}?`)) return;
+  const n = selectedIds.size;
+  bookmarks = bookmarks.filter(b => !selectedIds.has(b.id));
+  filteredBookmarks = filteredBookmarks ? filteredBookmarks.filter(b => !selectedIds.has(b.id)) : null;
+  selectedIds.clear();
+  save(); renderSidebar(); applyFilterAndRender();
+  toast(`Deleted ${n}`, 'success');
+}
+
+function deleteSingle(id) {
+  const bm = bookmarks.find(b => b.id === id);
+  if (!bm || !confirm(`Delete "${bm.title}"?`)) return;
+  bookmarks = bookmarks.filter(b => b.id !== id);
+  filteredBookmarks = filteredBookmarks ? filteredBookmarks.filter(b => b.id !== id) : null;
+  selectedIds.delete(id);
+  save(); renderSidebar(); applyFilterAndRender();
+  toast('Bookmark deleted', 'success');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// REORDER (drag within list)
+// ══════════════════════════════════════════════════════════════════════
+function reorderBookmark(draggedId, targetId, before) {
+  const di = bookmarks.findIndex(b => b.id === draggedId);
+  const ti = bookmarks.findIndex(b => b.id === targetId);
+  if (di === -1 || ti === -1) return;
+  const [item] = bookmarks.splice(di, 1);
+  const newTi  = bookmarks.findIndex(b => b.id === targetId);
+  bookmarks.splice(before ? newTi : newTi+1, 0, item);
+  bookmarks.forEach((b,i) => { b.order = i; });
+  sortMode = 'manual';
+  save(); renderBookmarks();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// EXPORT
+// ══════════════════════════════════════════════════════════════════════
+function openExportModal() {
+  if (!bookmarks.length) { toast('No bookmarks to export', 'error'); return; }
+  document.getElementById('exportPreview').style.display = 'none';
+  document.getElementById('copyExportBtn').style.display = 'none';
+  document.getElementById('downloadExportBtn').style.display = 'none';
+  document.getElementById('generateExportBtn').style.display = '';
+  openModal('exportModal');
+}
+
+function generateExport() {
+  const format = document.getElementById('exportFormat').value;
+  const scope  = document.querySelector('input[name="exportScope"]:checked').value;
+
+  let list;
+  if (scope === 'all')      list = bookmarks;
+  else if (scope === 'selected') {
+    if (!selectedIds.size) { toast('No bookmarks selected', 'error'); return; }
+    list = bookmarks.filter(b => selectedIds.has(b.id));
+  } else if (scope === 'filtered') {
+    list = filteredBookmarks !== null ? filteredBookmarks : bookmarks;
+  } else { // folder
+    list = activeFolderId !== null ? bookmarks.filter(b => (b.folderId||null)===activeFolderId) : bookmarks;
+  }
+
+  if (!list.length) { toast('Nothing to export', 'error'); return; }
+
+  let output = '';
+  if      (format === 'html-flat')    output = exportHtmlFlat(list);
+  else if (format === 'html-folders') output = exportHtmlFolders(list);
+  else if (format === 'json')         output = JSON.stringify(list, null, 2);
+  else if (format === 'text')         output = list.map(b => b.url).join('\n');
+  else if (format === 'csv')          output = exportCsv(list);
+  else if (format === 'markdown')     output = exportMarkdown(list);
+
+  document.getElementById('exportContent').textContent = output;
+  document.getElementById('exportPreview').style.display = '';
+  document.getElementById('generateExportBtn').style.display = 'none';
+  document.getElementById('copyExportBtn').style.display = '';
+  document.getElementById('downloadExportBtn').style.display = '';
+  toast(`${list.length} bookmark${list.length!==1?'s':''} ready`, 'success');
+}
+
+function exportHtmlFlat(list) {
+  const now = Math.floor(Date.now()/1000);
+  let h = `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<!-- This is an automatically generated file. -->\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n`;
+  list.forEach(b => {
+    const ts = Math.floor(new Date(b.dateAdded).getTime()/1000) || now;
+    h += `    <DT><A HREF="${escHtml(b.url)}" ADD_DATE="${ts}">${escHtml(b.title)}</A>\n`;
+  });
+  h += `</DL><p>`;
+  return h;
+}
+
+function exportHtmlFolders(list) {
+  const now = Math.floor(Date.now()/1000);
+  let h = `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<!-- This is an automatically generated file. -->\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n`;
+
+  // Group by folder
+  const byFolder = {};
+  list.forEach(b => {
+    const key = b.folderId||'__root__';
+    if (!byFolder[key]) byFolder[key] = [];
+    byFolder[key].push(b);
+  });
+
+  function renderFolderBlock(folderId, indent) {
+    const pad = '    '.repeat(indent);
+    const bms  = byFolder[folderId||'__root__']||[];
+    bms.forEach(b => {
+      const ts = Math.floor(new Date(b.dateAdded).getTime()/1000)||now;
+      h += `${pad}<DT><A HREF="${escHtml(b.url)}" ADD_DATE="${ts}">${escHtml(b.title)}</A>\n`;
+    });
+    getChildFolders(folderId).forEach(f => {
+      if (!byFolder[f.id]) return;
+      h += `${pad}<DT><H3 ADD_DATE="${now}" LAST_MODIFIED="${now}">${escHtml(f.name)}</H3>\n${pad}<DL><p>\n`;
+      renderFolderBlock(f.id, indent+1);
+      h += `${pad}</DL><p>\n`;
+    });
+  }
+
+  renderFolderBlock(null, 1);
+  folders.filter(f => !f.parentId && byFolder[f.id]).forEach(f => {
+    // already handled in renderFolderBlock
+  });
+  h += `</DL><p>`;
+  return h;
+}
+
+function exportCsv(list) {
+  const rows = [['Title','URL','Folder','Date Added','Notes']];
+  list.forEach(b => {
+    rows.push([b.title, b.url, getFolderPath(b.folderId), b.dateAdded, b.notes||''].map(escCsv));
+  });
+  return rows.map(r => r.join(',')).join('\n');
+}
+
+function exportMarkdown(list) {
+  const byFolder = {};
+  list.forEach(b => {
+    const key = b.folderId||'__root__';
+    if (!byFolder[key]) byFolder[key] = [];
+    byFolder[key].push(b);
+  });
+  let md = '# Bookmarks\n\n';
+  (byFolder['__root__']||[]).forEach(b => { md += `- [${b.title}](${b.url})\n`; });
+  folders.forEach(f => {
+    if (byFolder[f.id]) {
+      md += `\n## ${f.name}\n\n`;
+      byFolder[f.id].forEach(b => { md += `- [${b.title}](${b.url})\n`; });
+    }
+  });
+  return md;
+}
+
+function downloadExport() {
+  const format  = document.getElementById('exportFormat').value;
+  const content = document.getElementById('exportContent').textContent;
+  const mimes   = { 'html-flat':'text/html','html-folders':'text/html','json':'application/json','text':'text/plain','csv':'text/csv','markdown':'text/markdown' };
+  const exts    = { 'html-flat':'html','html-folders':'html','json':'json','text':'txt','csv':'csv','markdown':'md' };
+  const blob = new Blob([content], { type: mimes[format]||'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `bookmarks.${exts[format]||'txt'}`;
+  a.click(); URL.revokeObjectURL(url);
+  toast('Downloaded!', 'success');
+}
+
+function copyExport() {
+  const content = document.getElementById('exportContent').textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(content).then(() => toast('Copied!', 'success')).catch(() => fallbackCopy(content));
+  } else { fallbackCopy(content); }
+}
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy') ? toast('Copied!','success') : toast('Copy failed','error'); }
+  catch { toast('Copy failed','error'); }
+  document.body.removeChild(ta);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// CONTEXT MENU
+// ══════════════════════════════════════════════════════════════════════
+const ctxMenu = document.getElementById('ctx-menu');
+function showCtxMenu(x, y) {
+  ctxMenu.style.left = Math.min(x, window.innerWidth-160)+'px';
+  ctxMenu.style.top  = Math.min(y, window.innerHeight-180)+'px';
+  ctxMenu.classList.add('open');
+}
+function hideCtxMenu() { ctxMenu.classList.remove('open'); ctxTargetId = null; }
+
+document.getElementById('ctx-open').addEventListener('click', () => {
+  const bm = bookmarks.find(b => b.id === ctxTargetId);
+  if (bm) window.open(bm.url, '_blank', 'noopener,noreferrer');
+  hideCtxMenu();
+});
+document.getElementById('ctx-copy-url').addEventListener('click', () => {
+  const bm = bookmarks.find(b => b.id === ctxTargetId);
+  if (bm) copyText(bm.url);
+  hideCtxMenu();
+});
+document.getElementById('ctx-copy-title').addEventListener('click', () => {
+  const bm = bookmarks.find(b => b.id === ctxTargetId);
+  if (bm) copyText(bm.title);
+  hideCtxMenu();
+});
+document.getElementById('ctx-edit').addEventListener('click', () => {
+  const bm = bookmarks.find(b => b.id === ctxTargetId);
+  if (bm) openEditModal(bm);
+  hideCtxMenu();
+});
+document.getElementById('ctx-move').addEventListener('click', () => {
+  if (ctxTargetId) openMoveModal(new Set([ctxTargetId]));
+  hideCtxMenu();
+});
+document.getElementById('ctx-delete').addEventListener('click', () => {
+  if (ctxTargetId) deleteSingle(ctxTargetId);
+  hideCtxMenu();
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// MODAL HELPERS
+// ══════════════════════════════════════════════════════════════════════
+function openModal(id)  { document.getElementById(id).classList.add('open');    }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function populateFolderSelects() {
+  // called after folder changes to keep add/edit selects current
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════════════════════════
+function toast(msg, type='info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = type + ' show';
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = type; toastTimer = null; }, 3000);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// COPY TEXT
+// ══════════════════════════════════════════════════════════════════════
+function copyText(text) {
+  if (navigator.clipboard) { navigator.clipboard.writeText(text).then(() => toast('Copied!','success')).catch(() => fallbackCopy(text)); }
+  else { fallbackCopy(text); }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SIDEBAR RESIZE
+// ══════════════════════════════════════════════════════════════════════
+(function initResize() {
+  const handle   = document.getElementById('resize-handle');
+  const sidebar  = document.getElementById('sidebar');
+  let dragging   = false, startX = 0, startW = 0;
+  handle.addEventListener('mousedown', e => {
+    dragging = true; startX = e.clientX; startW = sidebar.offsetWidth;
+    handle.classList.add('active'); document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const w = Math.max(120, Math.min(400, startW + (e.clientX - startX)));
+    sidebar.style.width = w + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return; dragging = false;
+    handle.classList.remove('active'); document.body.style.userSelect = '';
+  });
+})();
+
+// ══════════════════════════════════════════════════════════════════════
+// EVENT WIRING
+// ══════════════════════════════════════════════════════════════════════
+// Import bar
+document.getElementById('toggleImportBtn').addEventListener('click', () => {
+  document.getElementById('import-bar').classList.toggle('collapsed');
+});
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files.length) {
+    document.getElementById('fileName').textContent = e.target.files[0].name;
+  }
+});
+document.getElementById('importBtn').addEventListener('click', () => {
+  const fi = document.getElementById('fileInput');
+  const ui = document.getElementById('urlInput');
+  if (fi.files.length) importFromFile(fi.files[0]);
+  else if (ui.value.trim()) importFromText(ui.value);
+  else toast('Provide a file or URLs', 'error');
+});
+document.getElementById('clearInputBtn').addEventListener('click', () => {
+  document.getElementById('fileInput').value = '';
+  document.getElementById('fileName').textContent = 'Drop file or click — .html, .json, .txt';
+  document.getElementById('urlInput').value = '';
+});
+
+// Drag-and-drop on import zone
+const dropZone = document.getElementById('import-file-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over'); });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) {
+    document.getElementById('fileName').textContent = e.dataTransfer.files[0].name;
+    importFromFile(e.dataTransfer.files[0]);
+  }
+});
+
+// Add bookmark
+document.getElementById('addBmBtn').addEventListener('click', openAddBar);
+document.getElementById('confirmAddBtn').addEventListener('click', confirmAdd);
+document.getElementById('cancelAddBtn').addEventListener('click', () => {
+  document.getElementById('add-bm-bar').classList.remove('open');
+});
+document.getElementById('addUrl').addEventListener('keydown', e => { if (e.key==='Enter') confirmAdd(); });
+
+// Toolbar
+document.getElementById('removeDuplicatesBtn').addEventListener('click', removeDuplicates);
+document.getElementById('selectAllBtn').addEventListener('click', selectAll);
+document.getElementById('deselectAllBtn').addEventListener('click', deselectAll);
+document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelected);
+document.getElementById('exportBtn').addEventListener('click', openExportModal);
+document.getElementById('moveSelectedBtn').addEventListener('click', () => {
+  if (!selectedIds.size) { toast('Nothing selected', 'error'); return; }
+  openMoveModal(new Set([...selectedIds]));
+});
+document.getElementById('tagBtn').addEventListener('click', () => {
+  if (!selectedIds.size) { toast('Nothing selected', 'error'); return; }
+  openMoveModal(new Set([...selectedIds]));
+});
+
+// Sort dropdown
+const sortBtn = document.getElementById('sortBtn');
+const sortDD  = document.getElementById('sortDropdown');
+sortBtn.addEventListener('click', e => { e.stopPropagation(); sortDD.classList.toggle('open'); });
+sortDD.querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    sortMode = btn.dataset.sort;
+    sortDD.classList.remove('open');
+    renderBookmarks();
+    toast('Sorted: ' + btn.textContent, 'success');
+  });
+});
+
+// Search
+const si = document.getElementById('searchInput');
+si.addEventListener('input', () => {
+  document.getElementById('clear-search').style.display = si.value ? 'block' : 'none';
+  applyFilterAndRender();
+});
+document.getElementById('clear-search').addEventListener('click', () => {
+  si.value = ''; si.dispatchEvent(new Event('input')); si.focus();
+});
+
+// Folder sidebar new
+document.getElementById('newFolderBtn').addEventListener('click', () => openFolderModal('new'));
+
+// Export modal
+document.getElementById('cancelExportBtn').addEventListener('click', () => closeModal('exportModal'));
+document.getElementById('generateExportBtn').addEventListener('click', generateExport);
+document.getElementById('copyExportBtn').addEventListener('click', copyExport);
+document.getElementById('downloadExportBtn').addEventListener('click', downloadExport);
+document.getElementById('exportFormat').addEventListener('change', () => {
+  document.getElementById('exportPreview').style.display = 'none';
+  document.getElementById('generateExportBtn').style.display = '';
+  document.getElementById('copyExportBtn').style.display = 'none';
+  document.getElementById('downloadExportBtn').style.display = 'none';
+});
+document.querySelectorAll('input[name="exportScope"]').forEach(r => r.addEventListener('change', () => {
+  document.getElementById('exportPreview').style.display = 'none';
+  document.getElementById('generateExportBtn').style.display = '';
+  document.getElementById('copyExportBtn').style.display = 'none';
+  document.getElementById('downloadExportBtn').style.display = 'none';
+}));
+
+// Edit modal
+document.getElementById('cancelEditBtn').addEventListener('click', () => closeModal('editModal'));
+document.getElementById('saveEditBtn').addEventListener('click', saveEdit);
+
+// Folder modal
+document.getElementById('cancelFolderBtn').addEventListener('click', () => closeModal('folderModal'));
+document.getElementById('saveFolderBtn').addEventListener('click', saveFolder);
+
+// Move modal
+document.getElementById('cancelMoveBtn').addEventListener('click', () => closeModal('moveModal'));
+document.getElementById('confirmMoveBtn').addEventListener('click', confirmMove);
+
+// Close dropdowns / modals on click outside
+document.addEventListener('click', e => {
+  if (!sortBtn.contains(e.target) && !sortDD.contains(e.target)) sortDD.classList.remove('open');
+  ['exportModal','editModal','folderModal','moveModal'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el.classList.contains('open') && e.target === el) closeModal(id);
+  });
+  if (!ctxMenu.contains(e.target)) hideCtxMenu();
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    ['exportModal','editModal','folderModal','moveModal'].forEach(id => closeModal(id));
+    sortDD.classList.remove('open'); hideCtxMenu();
+    if (document.getElementById('add-bm-bar').classList.contains('open'))
+      document.getElementById('add-bm-bar').classList.remove('open');
+  }
+  if ((e.ctrlKey||e.metaKey) && e.key==='f') { e.preventDefault(); si.focus(); si.select(); }
+  if ((e.ctrlKey||e.metaKey) && e.key==='n') { e.preventDefault(); openAddBar(); }
+  if ((e.ctrlKey||e.metaKey) && e.key==='s') {
+    if (document.getElementById('editModal').classList.contains('open')) { e.preventDefault(); saveEdit(); }
+  }
+  if ((e.ctrlKey||e.metaKey) && e.key==='a') {
+    if (document.activeElement === si) return;
+    e.preventDefault(); selectAll();
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════════════════
+loadData();
+renderSidebar();
+applyFilterAndRender();
+</script>
 </body>
 </html>
