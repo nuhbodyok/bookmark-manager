@@ -2,6 +2,8 @@
 
 A fast, self-contained bookmark manager that runs entirely in the browser — no build step, no server, no accounts. One HTML file. Host it anywhere.
 
+**[→ Live Demo](https://nuhbodyok.github.io/bookmark-manager/)**
+
 ---
 
 ## Features
